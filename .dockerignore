@@ -1,0 +1,13 @@
+node_modules
+.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.git
+.gitignore
+.DS_Store
+dist
+CLAUDE.md
+.claude
+public/styles.css

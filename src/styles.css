@@ -1,0 +1,377 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "SF Pro Text", "SF Pro Icons", -apple-system, "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border-color);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+}
+
+:root {
+  --surface: #ffffff;
+  --surface-2: #f5f5f7;
+  --surface-3: #e8e8ed;
+  --border-color: #d2d2d7;
+  --accent: #007aff;
+  --accent-hover: #0066d6;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #86868b;
+  --danger: #ff3b30;
+  --success: #34c759;
+  --nav-bg: rgba(251, 251, 253, 0.72);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --surface-3: #3a3a3c;
+    --border-color: #48484a;
+    --accent: #0a84ff;
+    --accent-hover: #409cff;
+    --text-primary: #f5f5f7;
+    --text-secondary: #98989d;
+    --text-tertiary: #636366;
+    --danger: #ff453a;
+    --success: #30d158;
+    --nav-bg: rgba(28, 28, 30, 0.72);
+  }
+}
+
+.nav-blur {
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  background: var(--nav-bg);
+}
+
+.card-elevated {
+  background: var(--surface);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card-hoverable:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .card-elevated {
+    box-shadow: none;
+    border: 1px solid var(--border-color);
+  }
+  .card-hoverable:hover {
+    box-shadow: none;
+    border-color: var(--accent);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in-up 0.5s ease-out both;
+}
+
+.animate-fade-in-delay-1 {
+  animation: fade-in-up 0.5s ease-out 0.1s both;
+}
+
+.animate-fade-in-delay-2 {
+  animation: fade-in-up 0.5s ease-out 0.2s both;
+}
+
+.drop-zone {
+  border: 2px dashed var(--border-color);
+  transition: border-color 0.2s ease, background-color 0.2s ease, border-style 0.2s ease;
+}
+
+.drop-zone:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+
+.drop-zone.dragging {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+/* Scale-fade: result cards, toasts */
+@keyframes scale-fade-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.animate-scale-fade-in {
+  animation: scale-fade-in 0.3s ease-out both;
+}
+
+/* Toast slide in/out */
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-up-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-100%); }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.35s ease-out both;
+}
+
+.animate-slide-up-out {
+  animation: slide-up-out 0.25s ease-in both;
+}
+
+/* Checkmark draw on copy */
+@keyframes draw-check {
+  from { stroke-dashoffset: 21; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Drop zone icon float during drag */
+@keyframes gentle-pulse {
+  0%, 100% { transform: translateY(0); opacity: 0.6; }
+  50%      { transform: translateY(-4px); opacity: 1; }
+}
+
+.drop-zone-icon-pulse {
+  animation: gentle-pulse 1.5s ease-in-out infinite;
+}
+
+/* Progress bar shimmer */
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+.progress-shimmer {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 50%, var(--accent) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Row fade-out for admin delete */
+@keyframes fade-out {
+  from { opacity: 1; max-height: 80px; }
+  to   { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
+}
+
+.animate-fade-out {
+  animation: fade-out 0.3s ease-in both;
+  overflow: hidden;
+}
+
+/* Shake for wrong password */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-out;
+}
+
+/* Unified button transform — shrink on hover */
+button, [role="button"], a.btn {
+  transition: all 0.3s;
+}
+
+button:hover, [role="button"]:hover, a.btn:hover {
+  transform: scale(0.95);
+}
+
+button:active, [role="button"]:active, a.btn:active {
+  transform: scale(0.95);
+}
+
+/* Folder card download icon */
+.download-circle {
+  color: var(--accent);
+  transition: all 0.3s;
+}
+
+.download-circle:hover {
+  color: #003166;
+  transform: scale(0.95);
+}
+
+/* Reveal transition (replaces hidden toggle) */
+.reveal:not(.visible) {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.reveal {
+  transition: max-height 0.35s ease, opacity 0.3s ease, margin 0.35s ease;
+}
+
+.reveal.visible {
+  max-height: 500px;
+  opacity: 1;
+}
+
+/* Toast notifications */
+.toast-container {
+  position: fixed;
+  top: 4rem;
+  right: 1.5rem;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  max-width: 24rem;
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+.toast-error {
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--danger);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+}
+
+.toast-success {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--success);
+  border: 1px solid rgba(52, 199, 89, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  .toast-error {
+    background: rgba(255, 69, 58, 0.15);
+    border-color: rgba(255, 69, 58, 0.25);
+  }
+  .toast-success {
+    background: rgba(48, 209, 88, 0.15);
+    border-color: rgba(48, 209, 88, 0.25);
+  }
+}
+
+/* Confirm dialog — Apple-style centered modal */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.dialog-backdrop.visible {
+  opacity: 1;
+}
+
+.dialog-panel {
+  background: var(--surface);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  width: 20rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  transform: scale(0.9);
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.dialog-backdrop.visible .dialog-panel {
+  transform: scale(1);
+  opacity: 1;
+}
+
+.dialog-backdrop.closing {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.dialog-backdrop.closing .dialog-panel {
+  transform: scale(0.95);
+  opacity: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dialog-backdrop {
+    background: rgba(0, 0, 0, 0.5);
+  }
+  .dialog-panel {
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-color);
+  }
+}
+
+/* Subtle inset ring — light/dark aware */
+.ring-subtle {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ring-subtle {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-in-delay-1,
+  .animate-fade-in-delay-2,
+  .animate-scale-fade-in,
+  .animate-slide-down,
+  .animate-slide-up-out,
+  .animate-fade-out,
+  .animate-shake,
+  .drop-zone-icon-pulse,
+  .progress-shimmer {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+  button:hover, [role="button"]:hover, a.btn:hover,
+  button:active, [role="button"]:active, a.btn:active,
+  .download-circle:hover {
+    transform: none;
+  }
+  .dialog-panel,
+  .dialog-backdrop.visible .dialog-panel,
+  .dialog-backdrop.closing .dialog-panel {
+    transform: none;
+    transition: opacity 0.15s ease;
+  }
+}
