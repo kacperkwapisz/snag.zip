@@ -9,6 +9,13 @@ import { downloadPage, downloadUnlockedPage, expiredPage } from "../templates/do
 // Short-lived single-use download tokens (for all files)
 const downloadTokens = new Map<string, number>();
 
+export function cleanupExpiredTokens() {
+  const now = Date.now();
+  for (const [token, expiry] of downloadTokens) {
+    if (now > expiry) downloadTokens.delete(token);
+  }
+}
+
 function createDownloadToken(fileId: string): string {
   const token = `${fileId}:${crypto.randomUUID()}`;
   downloadTokens.set(token, Date.now() + 5 * 60 * 1000);

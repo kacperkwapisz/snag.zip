@@ -14,6 +14,7 @@ import { folderRoutes } from "./routes/folder";
 import { pageRoutes } from "./routes/pages";
 import { uploadRoutes } from "./routes/upload";
 import { deleteFile } from "./s3";
+import { cleanupExpiredTokens } from "./routes/download";
 
 // --- Rate limiting ---
 const rateLimitMap = new Map<string, { count: number; reset: number }>();
@@ -38,7 +39,7 @@ function checkRateLimit(
 }
 
 // --- App ---
-const app = new Elysia()
+new Elysia()
   .onBeforeHandle(({ request }) => {
     const ip =
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -61,6 +62,10 @@ const app = new Elysia()
       response.headers.set("X-Content-Type-Options", "nosniff");
       response.headers.set("X-Frame-Options", "DENY");
       response.headers.set("Referrer-Policy", "no-referrer");
+      response.headers.set(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'",
+      );
 
       const url = new URL(request.url);
       if (url.pathname === "/upload" && config.publicUploads) {
@@ -86,19 +91,25 @@ async function cleanup() {
   for (const file of expiredFiles) {
     try {
       await deleteFile(file.s3_key);
-    } catch {}
-    deleteFileRecord(file.id);
+      deleteFileRecord(file.id);
+    } catch {
+      console.error(`Cleanup: failed to delete S3 object ${file.s3_key}`);
+    }
   }
   const expiredFolders = getExpiredFolders();
   for (const folder of expiredFolders) {
     const files = getFilesByFolder(folder.id);
+    let allDeleted = true;
     for (const file of files) {
       try {
         await deleteFile(file.s3_key);
-      } catch {}
-      deleteFileRecord(file.id);
+        deleteFileRecord(file.id);
+      } catch {
+        console.error(`Cleanup: failed to delete S3 object ${file.s3_key}`);
+        allDeleted = false;
+      }
     }
-    deleteFolderRecord(folder.id);
+    if (allDeleted) deleteFolderRecord(folder.id);
   }
   if (expiredFiles.length || expiredFolders.length) {
     console.log(
@@ -118,6 +129,7 @@ setInterval(
     for (const [ip, entry] of uploadRateLimitMap) {
       if (now > entry.reset) uploadRateLimitMap.delete(ip);
     }
+    cleanupExpiredTokens();
   },
   5 * 60 * 1000,
 );

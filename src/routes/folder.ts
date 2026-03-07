@@ -23,19 +23,32 @@ export const folderRoutes = new Elysia()
       let expiresAt: string | null = null;
       if (body.expiry) {
         const hours = Number(body.expiry);
-        if (hours > 0) {
-          const d = new Date(Date.now() + hours * 60 * 60 * 1000);
+        if (hours > 0 && Number.isFinite(hours)) {
+          const clamped = Math.min(hours, 8760); // max 1 year
+          const d = new Date(Date.now() + clamped * 60 * 60 * 1000);
           expiresAt = d.toISOString().replace("T", " ").slice(0, 19);
         }
       }
 
-      insertFolder({
-        id,
-        slug,
-        title: body.title ?? null,
-        description: body.description ?? null,
-        expires_at: expiresAt,
-      });
+      try {
+        insertFolder({
+          id,
+          slug,
+          title: body.title ?? null,
+          description: body.description ?? null,
+          expires_at: expiresAt,
+        });
+      } catch {
+        const fallbackSlug = generateId();
+        insertFolder({
+          id,
+          slug: fallbackSlug,
+          title: body.title ?? null,
+          description: body.description ?? null,
+          expires_at: expiresAt,
+        });
+        return { id, slug: fallbackSlug, url: `${config.baseUrl}/f/${fallbackSlug}` };
+      }
 
       return { id, slug, url: `${config.baseUrl}/f/${slug}` };
     },
@@ -52,7 +65,7 @@ export const folderRoutes = new Elysia()
     const folder = getFolderBySlug(params.slug);
     if (!folder || isExpired(folder.expires_at)) return html(expiredPage(), 410);
     const files = getFilesByFolder(folder.id);
-    return html(folderPage(folder, files, config.baseUrl));
+    return html(folderPage(folder, files));
   })
   .get("/f/:slug/zip", ({ params }) => {
     const folder = getFolderBySlug(params.slug);

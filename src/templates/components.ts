@@ -1,7 +1,6 @@
 import {
   formatBytes,
   timeUntilExpiry,
-  fileExtension,
   fileTypeLabel,
   esc,
 } from "../lib/format";
@@ -82,7 +81,6 @@ export function fileCard(file: FileRow, baseUrl: string): string {
 }
 
 export function folderFileCard(file: FileRow): string {
-  const ext = fileExtension(file.filename);
   const typeLabel = fileTypeLabel(file.type, file.filename);
 
   return `

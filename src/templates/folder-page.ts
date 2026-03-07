@@ -3,8 +3,13 @@ import { formatBytes, timeUntilExpiry, esc } from "../lib/format";
 import { folderFileCard } from "./components";
 import type { FileRow, FolderRow } from "../db";
 
-export function folderPage(folder: FolderRow, files: FileRow[], baseUrl: string): string {
-  const expiry = folder.expires_at ? timeUntilExpiry(folder.expires_at) : "Never";
+export function folderPage(
+  folder: FolderRow,
+  files: FileRow[],
+): string {
+  const expiry = folder.expires_at
+    ? timeUntilExpiry(folder.expires_at)
+    : "Never";
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
 
   const grid = files.length

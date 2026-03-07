@@ -20,10 +20,14 @@ async function signToken(payload: string): Promise<string> {
   return `${payload}.${btoa(String.fromCharCode(...new Uint8Array(sig)))}`;
 }
 
+const TOKEN_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours
+
 async function verifyToken(token: string): Promise<boolean> {
   const dot = token.lastIndexOf(".");
   if (dot === -1) return false;
   const payload = token.slice(0, dot);
+  const timestamp = Number(payload.split(":")[1]);
+  if (!timestamp || Date.now() - timestamp > TOKEN_MAX_AGE) return false;
   const expected = await signToken(payload);
   return token === expected;
 }
@@ -59,7 +63,10 @@ export const adminRoutes = new Elysia()
       return html(loginPage("Invalid username or password", redirect));
     }
 
-    const destination = redirect.startsWith("/") ? redirect : "/admin";
+    const destination =
+      redirect.startsWith("/") && !redirect.startsWith("//")
+        ? redirect
+        : "/admin";
     const token = await signToken(`${username}:${Date.now()}`);
     return new Response(null, {
       status: 302,

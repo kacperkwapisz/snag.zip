@@ -8,7 +8,12 @@ export function esc(str: string): string {
 }
 
 export function sanitizeFilename(name: string): string {
-  return name.replace(/\.\.\//g, "").replace(/^\/+/, "").replace(/\0/g, "");
+  return name
+    .replace(/\.\.\//g, "")
+    .replace(/^\/+/, "")
+    .replace(/\0/g, "")
+    .replace(/\\/g, "")
+    .replace(/[\x01-\x1f]/g, "");
 }
 
 export function safeContentDisposition(filename: string): string {

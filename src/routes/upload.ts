@@ -32,8 +32,9 @@ export const uploadRoutes = new Elysia()
       let expiresAt: string | null = null;
       if (body.expiry) {
         const hours = Number(body.expiry);
-        if (hours > 0) {
-          const d = new Date(Date.now() + hours * 60 * 60 * 1000);
+        if (hours > 0 && Number.isFinite(hours)) {
+          const clamped = Math.min(hours, 8760); // max 1 year
+          const d = new Date(Date.now() + clamped * 60 * 60 * 1000);
           expiresAt = d.toISOString().replace("T", " ").slice(0, 19);
         }
       }
