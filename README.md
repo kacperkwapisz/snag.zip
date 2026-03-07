@@ -46,6 +46,26 @@ bun run dev
 | `DEFAULT_EXPIRY_HOURS` | `168` | Link expiry in hours (7 days) |
 | `DATABASE_PATH` | `snag.db` | SQLite database file path |
 
+## S3/R2 CORS Configuration
+
+Files ≥10MB are uploaded directly from the browser to your S3/R2 bucket via presigned URLs. This requires CORS to be configured on your bucket.
+
+For **Cloudflare R2**, go to your bucket settings in the Cloudflare dashboard and add:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://your-domain.com"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Replace `https://your-domain.com` with your `BASE_URL`. For local development, use `http://localhost:3000`.
+
 ## Scripts
 
 ```sh
