@@ -1,29 +1,22 @@
-# Stage 1: Install all dependencies (needed for CSS build)
-FROM oven/bun:1 AS deps
+# Stage 1: Install deps + build CSS
+FROM oven/bun:1-slim AS build
 WORKDIR /app
 RUN bun add -g pnpm
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
-
-# Stage 2: Build CSS
-FROM deps AS build
 COPY src/ src/
 RUN bunx @tailwindcss/cli -i src/styles.css -o public/styles.css --minify
+RUN pnpm prune --prod
 
-# Stage 3: Production runtime
-FROM oven/bun:1-slim AS runtime
+# Stage 2: Production runtime
+FROM oven/bun:1-slim
 WORKDIR /app
 
-RUN bun add -g pnpm
-
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile && \
-    rm -rf /root/.local/share/pnpm/store
-
+COPY --from=build /app/node_modules node_modules/
+COPY --from=build /app/public/styles.css public/styles.css
+COPY package.json tsconfig.json ./
 COPY src/ src/
 COPY public/favicon.ico public/favicon.ico
-COPY --from=build /app/public/styles.css public/styles.css
-COPY tsconfig.json ./
 
 RUN mkdir -p /data && \
     groupadd --system --gid 1001 snag && \
