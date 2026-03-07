@@ -26,8 +26,8 @@ COPY --from=build /app/public/styles.css public/styles.css
 COPY tsconfig.json ./
 
 RUN mkdir -p /data && \
-    addgroup --system --gid 1001 snag && \
-    adduser --system --uid 1001 --ingroup snag snag && \
+    groupadd --system --gid 1001 snag && \
+    useradd --system --uid 1001 --gid snag --no-create-home snag && \
     chown snag:snag /data
 
 USER snag
