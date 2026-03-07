@@ -12,7 +12,7 @@ import { adminRoutes } from "./routes/admin";
 import { downloadRoutes } from "./routes/download";
 import { folderRoutes } from "./routes/folder";
 import { pageRoutes } from "./routes/pages";
-import { uploadRoutes } from "./routes/upload";
+import { uploadRoutes, cleanupPendingUploads } from "./routes/upload";
 import { deleteFile } from "./s3";
 import { cleanupExpiredTokens } from "./routes/download";
 
@@ -47,7 +47,10 @@ new Elysia()
       "unknown";
     const url = new URL(request.url);
 
-    if (url.pathname === "/upload" && request.method === "POST") {
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/upload" || url.pathname === "/upload/init")
+    ) {
       if (checkRateLimit(uploadRateLimitMap, ip, UPLOAD_RATE_LIMIT)) {
         return new Response("Too many uploads", { status: 429 });
       }
@@ -62,13 +65,15 @@ new Elysia()
       response.headers.set("X-Content-Type-Options", "nosniff");
       response.headers.set("X-Frame-Options", "DENY");
       response.headers.set("Referrer-Policy", "no-referrer");
+      const s3Origin = config.s3.endpoint ? new URL(config.s3.endpoint).origin : "";
+      const connectSrc = s3Origin ? `'self' ${s3Origin}` : "'self'";
       response.headers.set(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'",
+        `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${connectSrc}`,
       );
 
       const url = new URL(request.url);
-      if (url.pathname === "/upload" && config.publicUploads) {
+      if (url.pathname.startsWith("/upload") && config.publicUploads) {
         response.headers.set("Access-Control-Allow-Origin", "*");
         response.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
         response.headers.set("Access-Control-Allow-Headers", "Content-Type");
@@ -130,6 +135,7 @@ setInterval(
       if (now > entry.reset) uploadRateLimitMap.delete(ip);
     }
     cleanupExpiredTokens();
+    cleanupPendingUploads();
   },
   5 * 60 * 1000,
 );

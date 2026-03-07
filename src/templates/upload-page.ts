@@ -162,10 +162,11 @@ export function uploadPage(options?: { locked?: boolean }): string {
       else if (files.length > 1) showMultiChoice(files);
     });
     fileInput.addEventListener('change', function() {
-      if (fileInput.files.length === 1) {
-        uploadFile(fileInput.files[0]);
-      } else if (fileInput.files.length > 1) {
-        showMultiChoice(fileInput.files);
+      var files = Array.from(fileInput.files);
+      if (files.length === 1) {
+        uploadFile(files[0]);
+      } else if (files.length > 1) {
+        showMultiChoice(files);
       }
       fileInput.value = '';
     });
@@ -191,10 +192,62 @@ export function uploadPage(options?: { locked?: boolean }): string {
       return d.innerHTML;
     }
 
+    var MULTIPART_THRESHOLD = 10 * 1024 * 1024; // 10MB
+    var MAX_RETRIES = 3;
+    var CONCURRENCY = 3;
+
     function uploadFile(file) {
       if (uploading) return;
-      uploading = true;
+      if (file.size >= MULTIPART_THRESHOLD) {
+        uploadFileMultipart(file);
+      } else {
+        uploadFileDirect(file);
+      }
+    }
 
+    function showUploadProgress(file) {
+      progressContainer.classList.add('visible');
+      result.classList.remove('visible');
+      progressFilename.textContent = file.name;
+      progressBarEl.style.width = '0%';
+      progressBarEl.classList.add('progress-shimmer');
+      progressBarEl.classList.remove('bg-success', 'bg-accent');
+      progressPercent.textContent = '0%';
+      progressSpeed.textContent = '';
+      dropIcon.style.opacity = '0.3';
+      dropText.textContent = file.name;
+    }
+
+    function showUploadSuccess(url) {
+      resultLink.value = url;
+      progressBarEl.style.width = '100%';
+      progressBarEl.classList.remove('progress-shimmer');
+      progressBarEl.classList.add('bg-success');
+      progressSpeed.textContent = '';
+      setTimeout(function() {
+        progressContainer.classList.remove('visible');
+        progressBarEl.classList.remove('bg-success');
+        progressBarEl.classList.add('bg-accent');
+        result.classList.add('visible');
+        var card = result.querySelector('.card-elevated');
+        card.classList.remove('animate-scale-fade-in');
+        void card.offsetWidth;
+        card.classList.add('animate-scale-fade-in');
+        dropIcon.style.opacity = '1';
+        dropText.textContent = dropTextOriginal;
+      }, 600);
+      showToast('File uploaded!', 'success', 3000);
+    }
+
+    function showUploadError(msg) {
+      showToast(msg || 'Upload failed');
+      progressContainer.classList.remove('visible');
+      dropIcon.style.opacity = '1';
+      dropText.textContent = dropTextOriginal;
+    }
+
+    function uploadFileDirect(file) {
+      uploading = true;
       var formData = new FormData();
       formData.append('file', file);
 
@@ -207,17 +260,7 @@ export function uploadPage(options?: { locked?: boolean }): string {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', '/upload');
 
-      progressContainer.classList.add('visible');
-      result.classList.remove('visible');
-      progressFilename.textContent = file.name;
-      progressBarEl.style.width = '0%';
-      progressBarEl.classList.add('progress-shimmer');
-      progressBarEl.classList.remove('bg-success', 'bg-accent');
-      progressPercent.textContent = '0%';
-      progressSpeed.textContent = '';
-      dropIcon.style.opacity = '0.3';
-      dropText.textContent = file.name;
-
+      showUploadProgress(file);
       var lastLoaded = 0, lastTime = Date.now();
 
       xhr.upload.addEventListener('progress', function(e) {
@@ -239,43 +282,162 @@ export function uploadPage(options?: { locked?: boolean }): string {
       xhr.addEventListener('load', function() {
         if (xhr.status === 200) {
           var data = JSON.parse(xhr.responseText);
-          resultLink.value = data.url;
-          progressBarEl.style.width = '100%';
-          progressBarEl.classList.remove('progress-shimmer');
-          progressBarEl.classList.add('bg-success');
-          progressSpeed.textContent = '';
-          setTimeout(function() {
-            progressContainer.classList.remove('visible');
-            progressBarEl.classList.remove('bg-success');
-            progressBarEl.classList.add('bg-accent');
-            result.classList.add('visible');
-            var card = result.querySelector('.card-elevated');
-            card.classList.remove('animate-scale-fade-in');
-            void card.offsetWidth;
-            card.classList.add('animate-scale-fade-in');
-            dropIcon.style.opacity = '1';
-            dropText.textContent = dropTextOriginal;
-          }, 600);
-          showToast('File uploaded!', 'success', 3000);
+          showUploadSuccess(data.url);
           uploading = false;
         } else {
-          showToast('Upload failed: ' + xhr.responseText);
-          progressContainer.classList.remove('visible');
-          dropIcon.style.opacity = '1';
-          dropText.textContent = dropTextOriginal;
+          showUploadError('Upload failed: ' + xhr.responseText);
           uploading = false;
         }
       });
 
       xhr.addEventListener('error', function() {
-        showToast('Upload failed. Check your connection.');
-        progressContainer.classList.remove('visible');
-        dropIcon.style.opacity = '1';
-        dropText.textContent = dropTextOriginal;
+        showUploadError('Upload failed. Check your connection.');
         uploading = false;
       });
 
       xhr.send(formData);
+    }
+
+    function uploadPartXHR(url, blob) {
+      return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', url);
+        xhr.addEventListener('load', function() {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            var etag = xhr.getResponseHeader('ETag');
+            resolve({ etag: etag });
+          } else {
+            reject(new Error('Part upload failed: ' + xhr.status));
+          }
+        });
+        xhr.addEventListener('error', function() { reject(new Error('Network error')); });
+        xhr.upload.addEventListener('progress', function(e) {
+          if (e.lengthComputable && blob._onProgress) blob._onProgress(e.loaded);
+        });
+        xhr.send(blob);
+      });
+    }
+
+    async function uploadWithRetry(url, blob, retries) {
+      for (var attempt = 0; attempt <= retries; attempt++) {
+        try {
+          return await uploadPartXHR(url, blob);
+        } catch (err) {
+          if (attempt === retries) throw err;
+          await new Promise(function(r) { setTimeout(r, 1000 * Math.pow(2, attempt)); });
+        }
+      }
+    }
+
+    async function uploadFileMultipart(file) {
+      uploading = true;
+      showUploadProgress(file);
+
+      var expiry = document.getElementById('expiry-select').value;
+      var password = document.getElementById('password-input').value;
+
+      try {
+        // 1. Init
+        var initRes = await fetch('/upload/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type || 'application/octet-stream',
+            size: file.size,
+          })
+        });
+        if (!initRes.ok) throw new Error(await initRes.text());
+        var initData = await initRes.json();
+        var fileId = initData.fileId;
+        var partSize = initData.partSize;
+        var totalParts = initData.totalParts;
+
+        // 2. Upload parts with concurrency
+        var completedParts = [];
+        var totalUploaded = 0;
+        var lastSpeedTime = Date.now();
+        var lastSpeedBytes = 0;
+
+        function updateOverallProgress() {
+          var pct = Math.round((totalUploaded / file.size) * 100);
+          progressBarEl.style.width = Math.min(pct, 100) + '%';
+          progressPercent.textContent = Math.min(pct, 100) + '%';
+          var now = Date.now();
+          var elapsed = (now - lastSpeedTime) / 1000;
+          if (elapsed >= 0.5) {
+            var bps = (totalUploaded - lastSpeedBytes) / elapsed;
+            progressSpeed.textContent = formatSpeed(bps);
+            lastSpeedTime = now;
+            lastSpeedBytes = totalUploaded;
+          }
+        }
+
+        // Process parts in batches
+        var partIndex = 0;
+        while (partIndex < totalParts) {
+          var batchSize = Math.min(CONCURRENCY, totalParts - partIndex);
+          var partNumbers = [];
+          for (var b = 0; b < batchSize; b++) partNumbers.push(partIndex + b + 1);
+
+          // Get presigned URLs for this batch
+          var presignRes = await fetch('/upload/presign-parts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId: fileId, partNumbers: partNumbers })
+          });
+          if (!presignRes.ok) throw new Error('Failed to get presigned URLs');
+          var presignData = await presignRes.json();
+
+          // Upload batch in parallel
+          var batchPromises = partNumbers.map(function(pn) {
+            var start = (pn - 1) * partSize;
+            var end = Math.min(start + partSize, file.size);
+            var blob = file.slice(start, end);
+            var partBytesUploaded = 0;
+            blob._onProgress = function(loaded) {
+              var delta = loaded - partBytesUploaded;
+              partBytesUploaded = loaded;
+              totalUploaded += delta;
+              updateOverallProgress();
+            };
+            return uploadWithRetry(presignData.urls[pn], blob, MAX_RETRIES).then(function(res) {
+              completedParts.push({ partNumber: pn, etag: res.etag });
+            });
+          });
+
+          await Promise.all(batchPromises);
+          partIndex += batchSize;
+        }
+
+        // 3. Complete
+        completedParts.sort(function(a, b) { return a.partNumber - b.partNumber; });
+        var completeBody = { fileId: fileId, parts: completedParts };
+        if (expiry) completeBody.expiry = expiry;
+        if (password) completeBody.password = password;
+
+        var completeRes = await fetch('/upload/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(completeBody)
+        });
+        if (!completeRes.ok) throw new Error(await completeRes.text());
+        var result_data = await completeRes.json();
+
+        showUploadSuccess(result_data.url);
+        uploading = false;
+      } catch (err) {
+        // Try to abort the multipart upload
+        if (fileId) {
+          fetch('/upload/abort', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileId: fileId })
+          }).catch(function() {});
+        }
+        showUploadError('Upload failed: ' + (err.message || 'Unknown error'));
+        uploading = false;
+      }
     }
 
     copyBtn.addEventListener('click', function() {
@@ -348,6 +510,13 @@ export function uploadPage(options?: { locked?: boolean }): string {
     });
 
     function uploadOneFile(file, folderId) {
+      if (file.size >= MULTIPART_THRESHOLD) {
+        return uploadOneFileMultipart(file, folderId);
+      }
+      return uploadOneFileDirect(file, folderId);
+    }
+
+    function uploadOneFileDirect(file, folderId) {
       return new Promise(function(resolve, reject) {
         var formData = new FormData();
         formData.append('file', file);
@@ -387,6 +556,85 @@ export function uploadPage(options?: { locked?: boolean }): string {
 
         xhr.send(formData);
       });
+    }
+
+    async function uploadOneFileMultipart(file, folderId) {
+      var expiry = document.getElementById('expiry-select').value;
+      var password = (!folderId) ? document.getElementById('password-input').value : '';
+      var partSize = 5 * 1024 * 1024;
+
+      // 1. Init
+      var initBody = {
+        filename: file.name,
+        contentType: file.type || 'application/octet-stream',
+        size: file.size,
+      };
+      if (folderId) initBody.folderId = folderId;
+
+      var initRes = await fetch('/upload/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(initBody)
+      });
+      if (!initRes.ok) throw new Error(await initRes.text());
+      var initData = await initRes.json();
+      var fileId = initData.fileId;
+      var totalParts = initData.totalParts;
+      partSize = initData.partSize;
+
+      // 2. Upload parts
+      var completedParts = [];
+      var totalUploaded = 0;
+
+      var partIndex = 0;
+      while (partIndex < totalParts) {
+        var batchSize = Math.min(CONCURRENCY, totalParts - partIndex);
+        var partNumbers = [];
+        for (var b = 0; b < batchSize; b++) partNumbers.push(partIndex + b + 1);
+
+        var presignRes = await fetch('/upload/presign-parts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileId: fileId, partNumbers: partNumbers })
+        });
+        if (!presignRes.ok) throw new Error('Failed to get presigned URLs');
+        var presignData = await presignRes.json();
+
+        var batchPromises = partNumbers.map(function(pn) {
+          var start = (pn - 1) * partSize;
+          var end = Math.min(start + partSize, file.size);
+          var blob = file.slice(start, end);
+          var partBytesUploaded = 0;
+          blob._onProgress = function(loaded) {
+            var delta = loaded - partBytesUploaded;
+            partBytesUploaded = loaded;
+            totalUploaded += delta;
+            var pct = Math.round((totalUploaded / file.size) * 100);
+            file._progress = Math.min(pct, 100);
+            if (file._onProgress) file._onProgress(Math.min(pct, 100));
+          };
+          return uploadWithRetry(presignData.urls[pn], blob, MAX_RETRIES).then(function(res) {
+            completedParts.push({ partNumber: pn, etag: res.etag });
+          });
+        });
+
+        await Promise.all(batchPromises);
+        partIndex += batchSize;
+      }
+
+      // 3. Complete
+      completedParts.sort(function(a, b) { return a.partNumber - b.partNumber; });
+      var completeBody = { fileId: fileId, parts: completedParts };
+      if (expiry) completeBody.expiry = expiry;
+      if (password) completeBody.password = password;
+
+      var completeRes = await fetch('/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(completeBody)
+      });
+      if (!completeRes.ok) throw new Error(await completeRes.text());
+      return await completeRes.json();
     }
 
     function createProgressRow(filename, index) {

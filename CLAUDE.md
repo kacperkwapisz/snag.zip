@@ -6,7 +6,7 @@ Self-hosted file sharing. Upload a file, get a short link.
 
 - **Runtime**: Bun
 - **Framework**: Elysia
-- **Storage**: S3-compatible (Cloudflare R2) via `Bun.S3Client`
+- **Storage**: S3-compatible (Cloudflare R2) via `Bun.S3Client` + `@aws-sdk/client-s3` (multipart)
 - **Database**: `bun:sqlite`
 - **CSS**: Tailwind CSS v4 via `@tailwindcss/cli`
 - **IDs**: nanoid
@@ -30,10 +30,10 @@ src/
   index.ts              # app entry, middleware, cleanup cron
   config.ts             # env vars with defaults
   db.ts                 # bun:sqlite schema + prepared statements
-  s3.ts                 # S3Client singleton + helpers
+  s3.ts                 # S3Client singleton + helpers + multipart upload (AWS SDK)
   routes/
     pages.ts            # GET / (upload page)
-    upload.ts           # POST /upload
+    upload.ts           # POST /upload + multipart endpoints
     download.ts         # GET/POST /d/:id, GET /d/:id/raw
     folder.ts           # POST /folder, GET /f/:slug, GET /f/:slug/zip
     admin.ts            # GET /admin, DELETE /admin/files/:id
@@ -59,7 +59,11 @@ public/
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Upload page |
-| POST | `/upload` | Upload file (multipart, returns JSON) |
+| POST | `/upload` | Upload file (direct, for files <10MB) |
+| POST | `/upload/init` | Init S3 multipart upload (files ≥10MB) |
+| POST | `/upload/presign-parts` | Get presigned URLs for part uploads |
+| POST | `/upload/complete` | Complete multipart upload + save to DB |
+| POST | `/upload/abort` | Abort multipart upload |
 | GET | `/d/:id` | Download page |
 | POST | `/d/:id` | Password verification |
 | GET | `/d/:id/raw` | Raw file download |
@@ -76,6 +80,8 @@ public/
 - **HTML escaping**: All user strings MUST be escaped via `esc()` from `lib/format.ts` before embedding in templates.
 - **Password-protected downloads** use single-use 5-minute tokens, not session cookies.
 - **Filenames**: `sanitizeFilename()` strips `../`, leading `/`, null bytes. `safeContentDisposition()` handles RFC 5987 encoding.
+- **Large file uploads (≥10MB)** use S3 multipart upload via `@aws-sdk/client-s3`. Client uploads 5MB chunks directly to R2 via presigned PUT URLs (3 concurrent, 3 retries). Requires R2 CORS config allowing PUT from the app's origin with `ETag` exposed.
+- **R2 CORS** must be configured in Cloudflare dashboard: `AllowedOrigins: [domain]`, `AllowedMethods: [PUT]`, `AllowedHeaders: [Content-Type]`, `ExposeHeaders: [ETag]`.
 
 ## UI Direction
 
