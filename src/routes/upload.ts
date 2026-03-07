@@ -4,11 +4,15 @@ import { sanitizeFilename } from "../lib/format";
 import { uploadFile } from "../s3";
 import { insertFile, getFolder } from "../db";
 import { config } from "../config";
+import { isAuthenticated } from "./admin";
 
 export const uploadRoutes = new Elysia()
   .post(
     "/upload",
-    async ({ body }) => {
+    async ({ body, request }) => {
+      if (!config.publicUploads && !(await isAuthenticated(request.headers))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
       const file = body.file;
       const filename = sanitizeFilename(file.name) || "unnamed";
       const id = generateId();

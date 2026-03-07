@@ -8,11 +8,15 @@ import { config } from "../config";
 import { folderPage } from "../templates/folder-page";
 import { expiredPage } from "../templates/download-page";
 import { createZipStream } from "../lib/zip";
+import { isAuthenticated } from "./admin";
 
 export const folderRoutes = new Elysia()
   .post(
     "/folder",
-    ({ body }) => {
+    async ({ body, request }) => {
+      if (!config.publicUploads && !(await isAuthenticated(request.headers))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
       const id = generateId();
       const slug = body.slug ?? generateId();
 

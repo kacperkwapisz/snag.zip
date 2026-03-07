@@ -1,7 +1,7 @@
 import { layout } from "./layout";
 import { esc } from "../lib/format";
 
-export function loginPage(error?: string): string {
+export function loginPage(error?: string, redirect?: string): string {
   const body = `
     <div class="flex items-center justify-center min-h-[60vh]">
       <div class="card-elevated rounded-2xl p-8 max-w-sm w-full animate-fade-in" ${error ? 'style="animation: fade-in-up 0.5s ease-out both, shake 0.4s ease-out 0.5s"' : ""}>
@@ -18,6 +18,7 @@ export function loginPage(error?: string): string {
         </div>
         ${error ? `<p class="text-danger text-sm text-center mb-4">${esc(error)}</p>` : ""}
         <form method="POST" action="/admin/login" class="space-y-4">
+          ${redirect ? `<input type="hidden" name="redirect" value="${esc(redirect)}">` : ""}
           <div>
             <label class="block text-sm font-medium text-text-secondary mb-1.5">Username</label>
             <input type="text" name="username" required autocomplete="username" autofocus

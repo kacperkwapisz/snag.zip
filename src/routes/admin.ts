@@ -34,7 +34,7 @@ function getSessionCookie(headers: Headers): string | null {
   return match ? match[1] : null;
 }
 
-async function isAuthenticated(headers: Headers): Promise<boolean> {
+export async function isAuthenticated(headers: Headers): Promise<boolean> {
   const token = getSessionCookie(headers);
   if (!token) return false;
   return verifyToken(decodeURIComponent(token));
@@ -42,26 +42,30 @@ async function isAuthenticated(headers: Headers): Promise<boolean> {
 
 export const adminRoutes = new Elysia()
   .get("/admin/login", ({ request }) => {
-    return html(loginPage());
+    const url = new URL(request.url);
+    const redirect = url.searchParams.get("redirect") ?? "";
+    return html(loginPage(undefined, redirect));
   })
   .post("/admin/login", async ({ request }) => {
     const form = await request.formData();
     const username = form.get("username")?.toString() ?? "";
     const password = form.get("password")?.toString() ?? "";
+    const redirect = form.get("redirect")?.toString() ?? "";
 
     if (
       username !== config.admin.username ||
       password !== config.admin.password
     ) {
-      return html(loginPage("Invalid username or password"));
+      return html(loginPage("Invalid username or password", redirect));
     }
 
+    const destination = redirect.startsWith("/") ? redirect : "/admin";
     const token = await signToken(`${username}:${Date.now()}`);
     return new Response(null, {
       status: 302,
       headers: {
-        Location: "/admin",
-        "Set-Cookie": `admin_session=${encodeURIComponent(token)}; Path=/admin; HttpOnly; SameSite=Strict; Max-Age=86400`,
+        Location: destination,
+        "Set-Cookie": `admin_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400`,
       },
     });
   })

@@ -63,7 +63,7 @@ const app = new Elysia()
       response.headers.set("Referrer-Policy", "no-referrer");
 
       const url = new URL(request.url);
-      if (url.pathname === "/upload") {
+      if (url.pathname === "/upload" && config.publicUploads) {
         response.headers.set("Access-Control-Allow-Origin", "*");
         response.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
         response.headers.set("Access-Control-Allow-Headers", "Content-Type");
