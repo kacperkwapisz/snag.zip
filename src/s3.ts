@@ -24,6 +24,7 @@ const awsS3 = new S3Client({
     accessKeyId: config.s3.accessKeyId,
     secretAccessKey: config.s3.secretAccessKey,
   },
+  forcePathStyle: true,
 });
 
 export function uploadFile(key: string, data: Blob | ArrayBuffer | Uint8Array, filename: string) {
