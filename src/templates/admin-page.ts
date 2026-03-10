@@ -1,14 +1,20 @@
 import { layout } from "./layout";
 import { formatBytes, formatDate, timeUntilExpiry, esc } from "../lib/format";
-import type { FileRow, Stats, ApiKeyRow } from "../db";
+import type { FileRow, FolderRow, Stats, ApiKeyRow } from "../db";
 
-export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRow, "key_hash">[]): string {
-  const rows = files
+export function adminPage(
+  files: FileRow[],
+  folders: FolderRow[],
+  stats: Stats,
+  apiKeys: Omit<ApiKeyRow, "key_hash">[],
+): string {
+  const fileRows = files
     .map(
       (f) => `
     <tr class="border-t border-border/50 hover:bg-surface-2 transition-colors">
       <td class="py-3.5 px-5">
         <a href="/d/${f.id}" class="text-text-primary font-medium hover:text-accent transition-colors">${esc(f.filename)}</a>
+        ${f.folder_id ? `<span class="text-xs text-text-secondary ml-1.5">in folder</span>` : ""}
       </td>
       <td class="py-3.5 px-5 text-text-secondary tabular-nums">${formatBytes(f.size)}</td>
       <td class="py-3.5 px-5 text-text-secondary tabular-nums">${f.downloads}</td>
@@ -22,31 +28,62 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
     )
     .join("");
 
-  const emptyRow = `<tr><td colspan="6" class="py-16 text-center">
-    <div class="text-text-tertiary/30 mb-3">
+  const emptyFileRow = `<tr><td colspan="6" class="py-16 text-center">
+    <div class="text-text-secondary/30 mb-3">
       <svg class="mx-auto" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 7L16 7"/>
         <path d="M8 11L12 11"/>
         <path d="M13 21.5V21C13 18.1716 13 16.7574 13.8787 15.8787C14.7574 15 16.1716 15 19 15H19.5M20 13.3431V10C20 6.22876 20 4.34315 18.8284 3.17157C17.6569 2 15.7712 2 12 2C8.22877 2 6.34315 2 5.17157 3.17157C4 4.34314 4 6.22876 4 10L4 14.5442C4 17.7892 4 19.4117 4.88607 20.5107C5.06508 20.7327 5.26731 20.9349 5.48933 21.1139C6.58831 22 8.21082 22 11.4558 22C12.1614 22 12.5141 22 12.8372 21.886C12.9044 21.8623 12.9702 21.835 13.0345 21.8043C13.3436 21.6564 13.593 21.407 14.0919 20.9081L18.8284 16.1716C19.4065 15.5935 19.6955 15.3045 19.8478 14.9369C20 14.5694 20 14.1606 20 13.3431Z"/>
       </svg>
     </div>
-    <p class="text-sm text-text-tertiary">No files uploaded yet</p>
+    <p class="text-sm text-text-secondary">No files uploaded yet</p>
+  </td></tr>`;
+
+  const folderRows = folders
+    .map(
+      (f) => `
+    <tr class="border-t border-border/50 hover:bg-surface-2 transition-colors">
+      <td class="py-3.5 px-5">
+        <a href="/f/${esc(f.slug)}" class="text-text-primary font-medium hover:text-accent transition-colors">${esc(f.title || f.slug)}</a>
+      </td>
+      <td class="py-3.5 px-5 text-text-secondary font-mono text-xs">${esc(f.slug)}</td>
+      <td class="py-3.5 px-5 text-text-secondary tabular-nums">${f.expires_at ? timeUntilExpiry(f.expires_at) : "Never"}</td>
+      <td class="py-3.5 px-5 text-text-secondary tabular-nums">${formatDate(f.created_at)}</td>
+      <td class="py-3.5 px-5">
+        <button data-id="${esc(f.id)}" data-slug="${esc(f.slug)}" onclick="deleteFolder(this.dataset.id, this)"
+          class="text-danger hover:opacity-70 text-sm font-medium transition-opacity">Delete</button>
+      </td>
+    </tr>`,
+    )
+    .join("");
+
+  const emptyFolderRow = `<tr><td colspan="5" class="py-16 text-center">
+    <div class="text-text-secondary/30 mb-3">
+      <svg class="mx-auto" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 6.95c0-.883 0-1.324.07-1.692A4 4 0 0 1 5.257 2.07C5.626 2 6.068 2 6.95 2c.386 0 .58 0 .766.017a4 4 0 0 1 2.18.904c.144.119.28.255.554.529L11 4h6c1.886 0 2.828 0 3.414.586S21 6.114 21 8v4c0 3.771 0 5.657-1.172 6.828S16.771 20 13 20h-2c-3.771 0-5.657 0-6.828-1.172S3 15.771 3 12V8z"/>
+      </svg>
+    </div>
+    <p class="text-sm text-text-secondary">No folders yet</p>
   </td></tr>`;
 
   const body = `
     <h1 class="text-4xl font-semibold tracking-tight text-text-primary mb-10 animate-fade-in text-balance">Admin</h1>
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10 animate-fade-in-delay-1">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10 animate-fade-in-delay-1">
       <div class="card-elevated card-hoverable rounded-2xl p-6">
-        <p class="text-sm font-medium text-text-tertiary mb-1">Files</p>
+        <p class="text-sm font-medium text-text-secondary mb-1">Files</p>
         <p class="text-3xl font-semibold text-text-primary tabular-nums">${stats.total_files}</p>
       </div>
       <div class="card-elevated card-hoverable rounded-2xl p-6">
-        <p class="text-sm font-medium text-text-tertiary mb-1">Total Size</p>
+        <p class="text-sm font-medium text-text-secondary mb-1">Folders</p>
+        <p class="text-3xl font-semibold text-text-primary tabular-nums">${stats.total_folders}</p>
+      </div>
+      <div class="card-elevated card-hoverable rounded-2xl p-6">
+        <p class="text-sm font-medium text-text-secondary mb-1">Total Size</p>
         <p class="text-3xl font-semibold text-text-primary tabular-nums">${formatBytes(stats.total_size)}</p>
       </div>
       <div class="card-elevated card-hoverable rounded-2xl p-6">
-        <p class="text-sm font-medium text-text-tertiary mb-1">Downloads</p>
+        <p class="text-sm font-medium text-text-secondary mb-1">Downloads</p>
         <p class="text-3xl font-semibold text-text-primary tabular-nums">${stats.total_downloads}</p>
       </div>
     </div>
@@ -55,7 +92,7 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-semibold tracking-tight text-text-primary">API Keys</h2>
         <button onclick="showCreateKeyForm()"
-          class="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-xl transition-colors">
+          class="px-4 py-2 bg-text-primary hover:opacity-80 text-surface text-sm font-semibold rounded-xl transition-opacity">
           Create Key
         </button>
       </div>
@@ -64,7 +101,7 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
           <div class="flex-1">
             <label for="key-name" class="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
             <input type="text" id="key-name" name="name" required placeholder="e.g. CI pipeline"
-              class="w-full px-3.5 py-2.5 bg-surface-3 border border-border rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/40">
+              class="w-full px-3.5 py-2.5 bg-surface-3 border border-border rounded-xl text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent/40">
           </div>
           <button type="submit" class="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-xl transition-colors">
             Generate
@@ -85,12 +122,12 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
       <div class="card-elevated rounded-2xl overflow-hidden">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-              <th class="py-3 px-5">Name</th>
-              <th class="py-3 px-5">Created</th>
-              <th class="py-3 px-5">Last Used</th>
-              <th class="py-3 px-5">Status</th>
-              <th class="py-3 px-5"></th>
+            <tr class="text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
+              <th scope="col" class="py-3 px-5">Name</th>
+              <th scope="col" class="py-3 px-5">Created</th>
+              <th scope="col" class="py-3 px-5">Last Used</th>
+              <th scope="col" class="py-3 px-5">Status</th>
+              <th scope="col" class="py-3 px-5"><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -111,30 +148,48 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
                 ` : ''}
               </td>
             </tr>`).join("") : `
-            <tr><td colspan="5" class="py-10 text-center text-sm text-text-tertiary">No API keys yet</td></tr>`}
+            <tr><td colspan="5" class="py-10 text-center text-sm text-text-secondary">No API keys yet</td></tr>`}
           </tbody>
         </table>
       </div>
-      <p class="mt-3 text-xs text-text-tertiary">
-        API documentation available at <a href="/docs" class="text-accent hover:text-accent-hover transition-colors">/docs</a>
+      <p class="mt-3 text-xs text-text-secondary">
+        API documentation available at <a href="/docs" class="text-text-primary hover:text-accent transition-colors underline decoration-border underline-offset-2">/docs</a>
       </p>
+    </div>
+
+    <h2 class="text-xl font-semibold tracking-tight text-text-primary mb-4 animate-fade-in-delay-2">Folders</h2>
+    <div class="card-elevated rounded-2xl overflow-hidden mb-10 animate-fade-in-delay-2">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
+            <th scope="col" class="py-3 px-5">Title</th>
+            <th scope="col" class="py-3 px-5">Slug</th>
+            <th scope="col" class="py-3 px-5">Expires</th>
+            <th scope="col" class="py-3 px-5">Created</th>
+            <th scope="col" class="py-3 px-5"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${folderRows || emptyFolderRow}
+        </tbody>
+      </table>
     </div>
 
     <h2 class="text-xl font-semibold tracking-tight text-text-primary mb-4 animate-fade-in-delay-2">Files</h2>
     <div class="card-elevated rounded-2xl overflow-hidden animate-fade-in-delay-2">
       <table class="w-full text-sm">
         <thead>
-          <tr class="text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-            <th class="py-3 px-5">File</th>
-            <th class="py-3 px-5">Size</th>
-            <th class="py-3 px-5">Downloads</th>
-            <th class="py-3 px-5">Expires</th>
-            <th class="py-3 px-5">Uploaded</th>
-            <th class="py-3 px-5"></th>
+          <tr class="text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
+            <th scope="col" class="py-3 px-5">File</th>
+            <th scope="col" class="py-3 px-5">Size</th>
+            <th scope="col" class="py-3 px-5">Downloads</th>
+            <th scope="col" class="py-3 px-5">Expires</th>
+            <th scope="col" class="py-3 px-5">Uploaded</th>
+            <th scope="col" class="py-3 px-5"><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
-          ${rows || emptyRow}
+          ${fileRows || emptyFileRow}
         </tbody>
       </table>
     </div>
@@ -151,7 +206,7 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
           <path d="M14.5 16.5V10.5"/>
         </svg>
       </div>
-      <h3 class="text-base font-semibold text-text-primary mb-1">Delete file?</h3>
+      <h3 id="delete-dialog-title" class="text-base font-semibold text-text-primary mb-1">Delete file?</h3>
       <p id="delete-dialog-name" class="text-sm text-text-secondary mb-5 break-all"></p>
       <div class="flex gap-3">
         <button id="delete-dialog-cancel"
@@ -167,15 +222,25 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
   </div>
   <script>
     var deleteDialog = document.getElementById('delete-dialog');
+    var deleteDialogTitle = document.getElementById('delete-dialog-title');
     var deleteDialogName = document.getElementById('delete-dialog-name');
     var pendingDeleteId = null;
     var pendingDeleteBtn = null;
+    var pendingDeleteType = null;
 
-    function openDeleteDialog(id, btn) {
+    function openDeleteDialog(id, btn, type) {
       pendingDeleteId = id;
       pendingDeleteBtn = btn;
-      var filename = btn.closest('tr').querySelector('a').textContent;
-      deleteDialogName.textContent = filename;
+      pendingDeleteType = type || 'file';
+      if (type === 'folder') {
+        var name = btn.closest('tr').querySelector('a').textContent;
+        deleteDialogTitle.textContent = 'Delete folder?';
+        deleteDialogName.textContent = 'This will delete the folder "' + name + '" and all its files.';
+      } else {
+        var filename = btn.closest('tr').querySelector('a').textContent;
+        deleteDialogTitle.textContent = 'Delete file?';
+        deleteDialogName.textContent = filename;
+      }
       deleteDialog.style.display = '';
       requestAnimationFrame(function() {
         deleteDialog.classList.add('visible');
@@ -191,6 +256,7 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
         deleteDialog.style.display = 'none';
         pendingDeleteId = null;
         pendingDeleteBtn = null;
+        pendingDeleteType = null;
         if (cb) cb();
       });
     }
@@ -206,22 +272,28 @@ export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRo
     document.getElementById('delete-dialog-confirm').addEventListener('click', function() {
       var id = pendingDeleteId;
       var btn = pendingDeleteBtn;
+      var type = pendingDeleteType;
       if (!id) return;
       var tr = btn.closest('tr');
+      var url = type === 'folder' ? '/admin/folders/' + id : '/admin/files/' + id;
       closeDeleteDialog(function() {
-        fetch('/admin/files/' + id, { method: 'DELETE' }).then(function(res) {
+        fetch(url, { method: 'DELETE' }).then(function(res) {
           if (res.ok) {
             tr.classList.add('animate-fade-out');
             tr.addEventListener('animationend', function() { tr.remove(); });
           } else {
-            showToast('Failed to delete file');
+            showToast('Failed to delete ' + type);
           }
         });
       });
     });
 
     function deleteFile(id, btn) {
-      openDeleteDialog(id, btn);
+      openDeleteDialog(id, btn, 'file');
+    }
+
+    function deleteFolder(id, btn) {
+      openDeleteDialog(id, btn, 'folder');
     }
 
     function showCreateKeyForm() {

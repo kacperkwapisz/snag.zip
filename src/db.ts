@@ -115,7 +115,9 @@ const insertFolderStmt = db.prepare(`
 
 const getFolderBySlugStmt = db.prepare(`SELECT * FROM folders WHERE slug = ?`);
 const getFolderStmt = db.prepare(`SELECT * FROM folders WHERE id = ?`);
+const listFoldersStmt = db.prepare(`SELECT * FROM folders ORDER BY created_at DESC`);
 const deleteFolderStmt = db.prepare(`DELETE FROM folders WHERE id = ?`);
+const deleteFilesByFolderStmt = db.prepare(`DELETE FROM files WHERE folder_id = ?`);
 const getExpiredFoldersStmt = db.prepare(`SELECT * FROM folders WHERE expires_at IS NOT NULL AND expires_at < datetime('now')`);
 
 export type FolderRow = {
@@ -151,8 +153,20 @@ export function getFolder(id: string): FolderRow | null {
   return getFolderStmt.get(id) as FolderRow | null;
 }
 
+export function listFolders(): FolderRow[] {
+  return listFoldersStmt.all() as FolderRow[];
+}
+
 export function deleteFolderRecord(id: string) {
   deleteFolderStmt.run(id);
+}
+
+export function deleteFolderAndFiles(id: string): string[] {
+  const files = getFilesByFolderStmt.all(id) as FileRow[];
+  const s3Keys = files.map((f) => f.s3_key);
+  deleteFilesByFolderStmt.run(id);
+  deleteFolderStmt.run(id);
+  return s3Keys;
 }
 
 export function getExpiredFolders(): FolderRow[] {
@@ -222,16 +236,17 @@ export function updateApiKeyLastUsed(id: string) {
 
 const statsStmt = db.prepare(`
   SELECT
-    COUNT(*) as total_files,
-    COALESCE(SUM(size), 0) as total_size,
-    COALESCE(SUM(downloads), 0) as total_downloads
-  FROM files
+    (SELECT COUNT(*) FROM files) as total_files,
+    (SELECT COALESCE(SUM(size), 0) FROM files) as total_size,
+    (SELECT COALESCE(SUM(downloads), 0) FROM files) as total_downloads,
+    (SELECT COUNT(*) FROM folders) as total_folders
 `);
 
 export type Stats = {
   total_files: number;
   total_size: number;
   total_downloads: number;
+  total_folders: number;
 };
 
 export function getStats(): Stats {

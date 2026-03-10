@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { listFiles, getStats, getFile, deleteFileRecord, insertApiKey, listApiKeys, revokeApiKey } from "../db";
+import { listFiles, listFolders, getStats, getFile, deleteFileRecord, deleteFolderAndFiles, getFilesByFolder, insertApiKey, listApiKeys, revokeApiKey } from "../db";
 import { deleteFile } from "../s3";
 import { config } from "../config";
 import { html } from "../lib/http";
@@ -85,7 +85,7 @@ export const adminRoutes = new Elysia()
         headers: { Location: "/admin/login" },
       });
     }
-    return html(adminPage(listFiles(), getStats(), listApiKeys()));
+    return html(adminPage(listFiles(), listFolders(), getStats(), listApiKeys()));
   })
   .delete("/admin/files/:id", async ({ request, params }) => {
     if (!(await isAuthenticated(request.headers))) {
@@ -96,6 +96,16 @@ export const adminRoutes = new Elysia()
     await deleteFile(file.s3_key);
     deleteFileRecord(file.id);
     return new Response("OK");
+  })
+  .delete("/admin/folders/:id", async ({ request, params }) => {
+    if (!(await isAuthenticated(request.headers))) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    const s3Keys = deleteFolderAndFiles(params.id);
+    for (const key of s3Keys) {
+      try { await deleteFile(key); } catch { /* S3 cleanup best-effort */ }
+    }
+    return Response.json({ ok: true, deleted_files: s3Keys.length });
   })
   .post("/admin/api-keys", async ({ request }) => {
     if (!(await isAuthenticated(request.headers))) {
