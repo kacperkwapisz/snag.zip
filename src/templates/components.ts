@@ -46,7 +46,7 @@ export function copyButton(text: string, label = "Copy link"): string {
   </button>`;
 }
 
-export function expirySelect(): string {
+export function expirySelect(allowNever = true): string {
   return `
   <select name="expiry" id="expiry-select"
     class="bg-surface border border-border rounded-xl pl-3 pr-8 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent">
@@ -54,7 +54,7 @@ export function expirySelect(): string {
     <option value="24">24 hours</option>
     <option value="168" selected>7 days</option>
     <option value="720">30 days</option>
-    <option value="">Never</option>
+    ${allowNever ? '<option value="">Never</option>' : ""}
   </select>`;
 }
 

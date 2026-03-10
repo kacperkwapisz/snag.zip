@@ -1,5 +1,6 @@
 import { layout } from "./layout";
 import { dropZone, progressBar, expirySelect } from "./components";
+import { config } from "../config";
 
 export function uploadPage(options?: { locked?: boolean }): string {
   if (options?.locked) {
@@ -42,7 +43,7 @@ export function uploadPage(options?: { locked?: boolean }): string {
       <div class="mt-6 flex flex-wrap items-end gap-4">
         <div>
           <label class="block text-sm font-medium text-text-secondary mb-1.5">Expires in</label>
-          ${expirySelect()}
+          ${expirySelect(config.allowNeverExpiry)}
         </div>
         <div>
           <label class="block text-sm font-medium text-text-secondary mb-1.5">Password (optional)</label>

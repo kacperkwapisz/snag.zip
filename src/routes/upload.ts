@@ -38,7 +38,13 @@ export function cleanupPendingUploads() {
 }
 
 export function parseExpiry(expiry?: string): string | null {
-  if (!expiry) return null;
+  if (!expiry) {
+    if (!config.allowNeverExpiry) {
+      const d = new Date(Date.now() + config.defaultExpiryHours * 60 * 60 * 1000);
+      return d.toISOString().replace("T", " ").slice(0, 19);
+    }
+    return null;
+  }
   const hours = Number(expiry);
   if (hours > 0 && Number.isFinite(hours)) {
     const clamped = Math.min(hours, 8760); // max 1 year

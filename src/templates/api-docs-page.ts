@@ -1,8 +1,23 @@
 import { layout } from "./layout";
 import { config } from "../config";
 
+function code(text: string): string {
+  return `<code class="px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono">${text}</code>`;
+}
+
 function codeBlock(code: string): string {
-  return `<pre class="bg-surface-3 rounded-xl p-4 text-sm font-mono text-text-primary overflow-x-auto"><code>${code}</code></pre>`;
+  // Trim leading/trailing newlines and dedent
+  const lines = code.replace(/^\n/, "").replace(/\n\s*$/, "").split("\n");
+  const indent = lines.reduce((min, line) => {
+    if (!line.trim()) return min;
+    const match = line.match(/^(\s*)/);
+    return Math.min(min, match ? match[1].length : 0);
+  }, Infinity);
+  const dedented = lines.map((l) => l.slice(indent === Infinity ? 0 : indent)).join("\n");
+
+  return `<div class="relative group">
+    <pre class="bg-surface-3 rounded-2xl p-5 text-[13px] leading-relaxed font-mono text-text-primary overflow-x-auto"><code>${dedented}</code></pre>
+  </div>`;
 }
 
 function endpoint(
@@ -17,43 +32,73 @@ function endpoint(
   },
 ): string {
   const methodColors: Record<string, string> = {
-    GET: "bg-success/15 text-success",
-    POST: "bg-accent/15 text-accent",
-    DELETE: "bg-danger/15 text-danger",
+    GET: "bg-success/10 text-success border border-success/20",
+    POST: "bg-accent/10 text-accent border border-accent/20",
+    DELETE: "bg-danger/10 text-danger border border-danger/20",
   };
   const color = methodColors[method] ?? "bg-surface-3 text-text-secondary";
 
-  return `
-    <div class="border-t border-border/50 py-6">
-      <div class="flex items-center gap-3 mb-2">
-        <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold ${color}">${method}</span>
-        <code class="text-sm font-mono text-text-primary font-medium">${path}</code>
-      </div>
-      <p class="text-sm text-text-secondary mb-4 text-pretty">${description}</p>
-      ${details.body ? `<p class="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2">Request Body</p>${codeBlock(details.body)}` : ""}
-      ${details.query ? `<p class="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2 ${details.body ? "mt-4" : ""}">Query Parameters</p>${codeBlock(details.query)}` : ""}
-      <p class="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2 ${details.body || details.query ? "mt-4" : ""}">Response</p>
+  const sections: string[] = [];
+
+  if (details.body) {
+    sections.push(`
+      <div>
+        <p class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Request</p>
+        ${codeBlock(details.body)}
+      </div>`);
+  }
+
+  if (details.query) {
+    sections.push(`
+      <div>
+        <p class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Parameters</p>
+        ${codeBlock(details.query)}
+      </div>`);
+  }
+
+  sections.push(`
+    <div>
+      <p class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Response</p>
       ${codeBlock(details.response)}
-      ${details.notes ? `<p class="text-xs text-text-tertiary mt-3">${details.notes}</p>` : ""}
+    </div>`);
+
+  return `
+    <div class="py-7 first:pt-0">
+      <div class="flex items-center gap-3 mb-2">
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-bold tracking-wide ${color}">${method}</span>
+        <code class="text-[13px] font-mono text-text-primary font-semibold">${path}</code>
+      </div>
+      <p class="text-sm text-text-secondary mb-5 text-pretty">${description}</p>
+      <div class="space-y-4">
+        ${sections.join("")}
+      </div>
+      ${details.notes ? `<p class="text-xs text-text-tertiary mt-4 leading-relaxed">${details.notes}</p>` : ""}
     </div>`;
+}
+
+function sectionDivider(): string {
+  return `<div class="border-t border-border/40"></div>`;
 }
 
 export function apiDocsPage(): string {
   const base = config.baseUrl;
 
   const body = `
-    <h1 class="text-4xl font-semibold tracking-tight text-text-primary mb-3 animate-fade-in text-balance">API Reference</h1>
-    <p class="text-lg text-text-secondary mb-10 animate-fade-in text-pretty">
-      Upload, download, and manage files programmatically.
-    </p>
+    <div class="animate-fade-in">
+      <h1 class="text-4xl font-semibold tracking-tight text-text-primary mb-3 text-balance">API Reference</h1>
+      <p class="text-lg text-text-secondary mb-12 text-pretty">
+        Upload, download, and manage files programmatically.
+      </p>
+    </div>
 
     <!-- Quick Start -->
-    <div class="card-elevated rounded-2xl p-6 mb-8 animate-fade-in-delay-1">
-      <h2 class="text-lg font-semibold text-text-primary mb-4">Quick Start</h2>
-      <p class="text-sm text-text-secondary mb-4 text-pretty">
+    <section class="card-elevated rounded-2xl p-8 mb-6 animate-fade-in-delay-1">
+      <h2 class="text-xl font-semibold text-text-primary mb-2">Quick Start</h2>
+      <p class="text-sm text-text-secondary mb-5 text-pretty">
         Get an API key from the <a href="/admin" class="text-accent hover:text-accent-hover transition-colors">admin dashboard</a>, then start making requests:
       </p>
-      ${codeBlock(`# Upload a file
+      ${codeBlock(`
+# Upload a file
 curl -X POST ${base}/api/v1/files \\
   -H "Authorization: Bearer snag_your_key_here" \\
   -F "file=@photo.jpg" \\
@@ -64,7 +109,7 @@ curl ${base}/api/v1/files/abc1234/content \\
   -H "Authorization: Bearer snag_your_key_here" \\
   -o photo.jpg
 
-# Create a folder and upload into it
+# Create a folder
 curl -X POST ${base}/api/v1/folders \\
   -H "Authorization: Bearer snag_your_key_here" \\
   -H "Content-Type: application/json" \\
@@ -72,96 +117,104 @@ curl -X POST ${base}/api/v1/folders \\
 
 # List all files
 curl ${base}/api/v1/files \\
-  -H "Authorization: Bearer snag_your_key_here"`)}
-    </div>
+  -H "Authorization: Bearer snag_your_key_here"
+      `)}
+    </section>
 
-    <!-- Authentication -->
-    <div class="card-elevated rounded-2xl p-6 mb-8 animate-fade-in-delay-1">
-      <h2 class="text-lg font-semibold text-text-primary mb-4">Authentication</h2>
-      <p class="text-sm text-text-secondary mb-4 text-pretty">
-        All API requests require a valid API key passed in the <code class="px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono">Authorization</code> header:
-      </p>
-      ${codeBlock(`Authorization: Bearer snag_your_key_here`)}
-      <p class="text-sm text-text-secondary mt-4 text-pretty">
-        API keys can be created and managed from the <a href="/admin" class="text-accent hover:text-accent-hover transition-colors">admin dashboard</a>.
-        Keys are prefixed with <code class="px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono">snag_</code> for easy identification.
-      </p>
-    </div>
+    <!-- Auth + Base URL + Errors + Rate Limits in a grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 animate-fade-in-delay-1">
 
-    <!-- Base URL -->
-    <div class="card-elevated rounded-2xl p-6 mb-8 animate-fade-in-delay-1">
-      <h2 class="text-lg font-semibold text-text-primary mb-4">Base URL</h2>
-      ${codeBlock(base + "/api/v1")}
-      <p class="text-sm text-text-secondary mt-3 text-pretty">
-        All endpoints are prefixed with <code class="px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono">/api/v1</code>.
-      </p>
+      <!-- Authentication -->
+      <section class="card-elevated rounded-2xl p-8">
+        <h2 class="text-xl font-semibold text-text-primary mb-2">Authentication</h2>
+        <p class="text-sm text-text-secondary mb-5 text-pretty">
+          All requests require an API key via the ${code("Authorization")} header.
+        </p>
+        ${codeBlock("Authorization: Bearer snag_your_key_here")}
+        <p class="text-xs text-text-tertiary mt-4 leading-relaxed">
+          Create keys in the <a href="/admin" class="text-accent hover:text-accent-hover transition-colors">admin dashboard</a>.
+          Keys are prefixed with ${code("snag_")} for easy identification.
+        </p>
+      </section>
+
+      <!-- Base URL + Rate Limits -->
+      <div class="space-y-6">
+        <section class="card-elevated rounded-2xl p-8">
+          <h2 class="text-xl font-semibold text-text-primary mb-2">Base URL</h2>
+          ${codeBlock(base + "/api/v1")}
+        </section>
+
+        <section class="card-elevated rounded-2xl p-8">
+          <h2 class="text-xl font-semibold text-text-primary mb-4">Rate Limits</h2>
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-text-secondary">General requests</span>
+              <span class="text-text-primary font-medium tabular-nums">60 / min</span>
+            </div>
+            <div class="border-t border-border/30"></div>
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-text-secondary">Uploads</span>
+              <span class="text-text-primary font-medium tabular-nums">10 / min</span>
+            </div>
+          </div>
+          <p class="text-xs text-text-tertiary mt-4">Per IP address. Returns ${code("429")} with ${code("rate_limited")} error code.</p>
+        </section>
+      </div>
     </div>
 
     <!-- Errors -->
-    <div class="card-elevated rounded-2xl p-6 mb-8 animate-fade-in-delay-2">
-      <h2 class="text-lg font-semibold text-text-primary mb-4">Errors</h2>
-      <p class="text-sm text-text-secondary mb-4 text-pretty">
-        All errors return a consistent JSON format:
+    <section class="card-elevated rounded-2xl p-8 mb-6 animate-fade-in-delay-2">
+      <h2 class="text-xl font-semibold text-text-primary mb-2">Errors</h2>
+      <p class="text-sm text-text-secondary mb-5 text-pretty">
+        All errors return a consistent JSON envelope:
       </p>
-      ${codeBlock(`{
+      ${codeBlock(`
+{
   "error": {
     "code": "not_found",
     "message": "File not found"
   }
-}`)}
-      <div class="mt-4 overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-              <th class="py-2 pr-4">HTTP</th>
-              <th class="py-2 pr-4">Code</th>
-              <th class="py-2">Description</th>
-            </tr>
-          </thead>
-          <tbody class="text-text-secondary">
-            <tr class="border-t border-border/30"><td class="py-2 pr-4 tabular-nums">400</td><td class="py-2 pr-4 font-mono text-xs">bad_request</td><td class="py-2">Invalid input or missing fields</td></tr>
-            <tr class="border-t border-border/30"><td class="py-2 pr-4 tabular-nums">401</td><td class="py-2 pr-4 font-mono text-xs">unauthorized</td><td class="py-2">Missing/invalid API key or wrong password</td></tr>
-            <tr class="border-t border-border/30"><td class="py-2 pr-4 tabular-nums">404</td><td class="py-2 pr-4 font-mono text-xs">not_found</td><td class="py-2">Resource does not exist</td></tr>
-            <tr class="border-t border-border/30"><td class="py-2 pr-4 tabular-nums">410</td><td class="py-2 pr-4 font-mono text-xs">expired</td><td class="py-2">File or folder has expired</td></tr>
-            <tr class="border-t border-border/30"><td class="py-2 pr-4 tabular-nums">413</td><td class="py-2 pr-4 font-mono text-xs">file_too_large</td><td class="py-2">File exceeds size limit</td></tr>
-            <tr class="border-t border-border/30"><td class="py-2 pr-4 tabular-nums">429</td><td class="py-2 pr-4 font-mono text-xs">rate_limited</td><td class="py-2">Too many requests</td></tr>
-            <tr class="border-t border-border/30"><td class="py-2 pr-4 tabular-nums">502</td><td class="py-2 pr-4 font-mono text-xs">storage_error</td><td class="py-2">S3 storage operation failed</td></tr>
-          </tbody>
-        </table>
+}
+      `)}
+      <div class="mt-6 space-y-0">
+        <div class="grid grid-cols-[3rem_1fr_1fr] gap-x-4 py-2.5 text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+          <span>HTTP</span><span>Code</span><span>Description</span>
+        </div>
+        ${[
+          ["400", "bad_request", "Invalid input or missing fields"],
+          ["401", "unauthorized", "Missing/invalid API key or wrong password"],
+          ["404", "not_found", "Resource does not exist"],
+          ["410", "expired", "File or folder has expired"],
+          ["413", "file_too_large", "File exceeds size limit"],
+          ["429", "rate_limited", "Too many requests"],
+          ["502", "storage_error", "S3 storage operation failed"],
+        ]
+          .map(
+            ([status, errCode, desc]) => `
+        <div class="grid grid-cols-[3rem_1fr_1fr] gap-x-4 py-2.5 border-t border-border/30 text-sm">
+          <span class="text-text-primary font-medium tabular-nums">${status}</span>
+          <span class="font-mono text-xs text-text-secondary">${errCode}</span>
+          <span class="text-text-secondary">${desc}</span>
+        </div>`,
+          )
+          .join("")}
       </div>
-    </div>
+    </section>
 
-    <!-- Rate Limits -->
-    <div class="card-elevated rounded-2xl p-6 mb-8 animate-fade-in-delay-2">
-      <h2 class="text-lg font-semibold text-text-primary mb-4">Rate Limits</h2>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
-              <th class="py-2 pr-4">Category</th>
-              <th class="py-2">Limit</th>
-            </tr>
-          </thead>
-          <tbody class="text-text-secondary">
-            <tr class="border-t border-border/30"><td class="py-2 pr-4">General requests</td><td class="py-2 tabular-nums">60 / minute</td></tr>
-            <tr class="border-t border-border/30"><td class="py-2 pr-4">Uploads</td><td class="py-2 tabular-nums">10 / minute</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="text-xs text-text-tertiary mt-3">Rate limits are per IP address.</p>
-    </div>
-
-    <!-- Files Endpoints -->
-    <div class="card-elevated rounded-2xl p-6 mb-8 animate-fade-in-delay-2">
-      <h2 class="text-lg font-semibold text-text-primary mb-2">Files</h2>
+    <!-- Files -->
+    <section class="card-elevated rounded-2xl p-8 mb-6 animate-fade-in-delay-2">
+      <h2 class="text-xl font-semibold text-text-primary mb-1">Files</h2>
 
       ${endpoint("POST", "/api/v1/files", "Upload a file. Send as multipart/form-data.", {
-        body: `// multipart/form-data fields:
+        body: `
+// multipart/form-data fields:
 file        File    (required) The file to upload
 expiry      string  (optional) Hours until expiration (max 8760)
 password    string  (optional) Password-protect the file
-folder_id   string  (optional) Add to an existing folder`,
-        response: `{
+folder_id   string  (optional) Add to an existing folder
+        `,
+        response: `
+{
   "id": "abc1234",
   "filename": "photo.jpg",
   "size": 1048576,
@@ -173,11 +226,15 @@ folder_id   string  (optional) Add to an existing folder`,
   "folder_id": null,
   "url": "${base}/d/abc1234",
   "download_url": "${base}/api/v1/files/abc1234/content"
-}`,
+}
+        `,
       })}
 
+      ${sectionDivider()}
+
       ${endpoint("GET", "/api/v1/files", "List all files.", {
-        response: `{
+        response: `
+{
   "files": [
     {
       "id": "abc1234",
@@ -186,11 +243,15 @@ folder_id   string  (optional) Add to an existing folder`,
       ...
     }
   ]
-}`,
+}
+        `,
       })}
 
+      ${sectionDivider()}
+
       ${endpoint("GET", "/api/v1/files/:id", "Get file metadata.", {
-        response: `{
+        response: `
+{
   "id": "abc1234",
   "filename": "photo.jpg",
   "size": 1048576,
@@ -202,59 +263,77 @@ folder_id   string  (optional) Add to an existing folder`,
   "folder_id": null,
   "url": "${base}/d/abc1234",
   "download_url": "${base}/api/v1/files/abc1234/content"
-}`,
+}
+        `,
       })}
 
+      ${sectionDivider()}
+
       ${endpoint("GET", "/api/v1/files/:id/content", "Download file content. Returns the raw file as a binary stream.", {
-        query: `password   string  (required if file is password-protected)`,
-        response: `Binary file stream with Content-Type, Content-Disposition, and Content-Length headers.`,
-        notes: "For password-protected files, pass the password as a query parameter: <code class='px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono'>?password=secret</code>",
+        query: "password   string  (required if file is password-protected)",
+        response: "Binary file stream with Content-Type, Content-Disposition, and Content-Length headers.",
+        notes: `For password-protected files, pass the password as a query parameter: ${code("?password=secret")}`,
       })}
+
+      ${sectionDivider()}
 
       ${endpoint("DELETE", "/api/v1/files/:id", "Delete a file and its S3 object.", {
         response: `{ "ok": true }`,
       })}
-    </div>
+    </section>
 
     <!-- Multipart Upload -->
-    <div class="card-elevated rounded-2xl p-6 mb-8 animate-fade-in-delay-2">
-      <h2 class="text-lg font-semibold text-text-primary mb-2">Multipart Upload</h2>
+    <section class="card-elevated rounded-2xl p-8 mb-6 animate-fade-in-delay-2">
+      <h2 class="text-xl font-semibold text-text-primary mb-1">Multipart Upload</h2>
       <p class="text-sm text-text-secondary mb-2 text-pretty">
-        For large files, use multipart upload. The flow is: <strong>init</strong> &rarr; <strong>presign</strong> (for each batch of parts) &rarr; <strong>upload parts to S3</strong> &rarr; <strong>complete</strong>.
+        For large files, use multipart upload: ${code("init")} &rarr; ${code("presign")} &rarr; upload parts to S3 &rarr; ${code("complete")}.
       </p>
 
       ${endpoint("POST", "/api/v1/files/multipart/init", "Start a multipart upload.", {
-        body: `{
+        body: `
+{
   "filename": "large-file.zip",
   "content_type": "application/zip",
   "size": 52428800,
   "folder_id": "optional_folder_id"
-}`,
-        response: `{
+}
+        `,
+        response: `
+{
   "file_id": "abc1234",
   "upload_id": "s3-multipart-upload-id",
   "part_size": 5242880,
   "total_parts": 10
-}`,
+}
+        `,
       })}
 
+      ${sectionDivider()}
+
       ${endpoint("POST", "/api/v1/files/multipart/presign", "Get presigned URLs for uploading parts directly to S3.", {
-        body: `{
+        body: `
+{
   "file_id": "abc1234",
   "part_numbers": [1, 2, 3]
-}`,
-        response: `{
+}
+        `,
+        response: `
+{
   "urls": {
     "1": "https://s3.example.com/...?X-Amz-Signature=...",
     "2": "https://s3.example.com/...?X-Amz-Signature=...",
     "3": "https://s3.example.com/...?X-Amz-Signature=..."
   }
-}`,
-        notes: "Upload each part with a PUT request to the presigned URL. Capture the <code class='px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono'>ETag</code> response header for each part.",
+}
+        `,
+        notes: `Upload each part with a PUT request to the presigned URL. Capture the ${code("ETag")} response header for each part.`,
       })}
 
+      ${sectionDivider()}
+
       ${endpoint("POST", "/api/v1/files/multipart/complete", "Complete the multipart upload and create the file record.", {
-        body: `{
+        body: `
+{
   "file_id": "abc1234",
   "parts": [
     { "partNumber": 1, "etag": "\\"abc123\\"" },
@@ -262,34 +341,42 @@ folder_id   string  (optional) Add to an existing folder`,
   ],
   "expiry": "168",
   "password": "optional"
-}`,
-        response: `{
+}
+        `,
+        response: `
+{
   "id": "abc1234",
   "filename": "large-file.zip",
   "size": 52428800,
   "type": "application/zip",
   ...
-}`,
+}
+        `,
       })}
+
+      ${sectionDivider()}
 
       ${endpoint("POST", "/api/v1/files/multipart/abort", "Cancel an in-progress multipart upload.", {
         body: `{ "file_id": "abc1234" }`,
         response: `{ "ok": true }`,
       })}
-    </div>
+    </section>
 
     <!-- Folders -->
-    <div class="card-elevated rounded-2xl p-6 mb-8 animate-fade-in-delay-2">
-      <h2 class="text-lg font-semibold text-text-primary mb-2">Folders</h2>
+    <section class="card-elevated rounded-2xl p-8 mb-6 animate-fade-in-delay-2">
+      <h2 class="text-xl font-semibold text-text-primary mb-1">Folders</h2>
 
-      ${endpoint("POST", "/api/v1/folders", "Create a folder. Upload files into it using the folder's <code class='px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono'>id</code> as <code class='px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono'>folder_id</code> in upload requests.", {
-        body: `{
+      ${endpoint("POST", "/api/v1/folders", `Create a folder. Upload files into it using the folder's ${code("id")} as ${code("folder_id")} in upload requests.`, {
+        body: `
+{
   "slug": "my-photos",
   "title": "My Photos",
   "description": "Vacation photos",
   "expiry": "720"
-}`,
-        response: `{
+}
+        `,
+        response: `
+{
   "id": "xyz7890",
   "slug": "my-photos",
   "title": "My Photos",
@@ -297,12 +384,16 @@ folder_id   string  (optional) Add to an existing folder`,
   "created_at": "2026-03-10 12:00:00",
   "expires_at": "2026-04-09 12:00:00",
   "url": "${base}/f/my-photos"
-}`,
-        notes: "All fields except <code class='px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono'>slug</code> are optional. If the slug conflicts, a random one is generated.",
+}
+        `,
+        notes: `All fields are optional. If ${code("slug")} conflicts, a random one is generated.`,
       })}
 
+      ${sectionDivider()}
+
       ${endpoint("GET", "/api/v1/folders/:slug", "Get folder info and its files.", {
-        response: `{
+        response: `
+{
   "id": "xyz7890",
   "slug": "my-photos",
   "title": "My Photos",
@@ -321,27 +412,32 @@ folder_id   string  (optional) Add to an existing folder`,
       "url": "${base}/d/abc1234"
     }
   ]
-}`,
+}
+        `,
       })}
+
+      ${sectionDivider()}
 
       ${endpoint("DELETE", "/api/v1/folders/:slug", "Delete a folder and all its files.", {
         response: `{ "ok": true, "deleted_files": 5 }`,
       })}
-    </div>
+    </section>
 
     <!-- Stats -->
-    <div class="card-elevated rounded-2xl p-6 animate-fade-in-delay-2">
-      <h2 class="text-lg font-semibold text-text-primary mb-2">Stats</h2>
+    <section class="card-elevated rounded-2xl p-8 animate-fade-in-delay-2">
+      <h2 class="text-xl font-semibold text-text-primary mb-1">Stats</h2>
 
       ${endpoint("GET", "/api/v1/stats", "Get instance-wide statistics.", {
-        response: `{
+        response: `
+{
   "total_files": 150,
   "total_size": 5368709120,
   "total_downloads": 3420
-}`,
-        notes: "<code class='px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono'>total_size</code> is in bytes.",
+}
+        `,
+        notes: `${code("total_size")} is in bytes.`,
       })}
-    </div>
+    </section>
   `;
 
   return layout("API Docs", body, "", { wide: true });

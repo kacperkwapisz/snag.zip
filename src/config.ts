@@ -17,6 +17,7 @@ export const config = {
   },
 
   publicUploads: env.PUBLIC_UPLOADS === "true",
+  allowNeverExpiry: env.ALLOW_NEVER_EXPIRY !== "false",
   maxFileSize: Number(env.MAX_FILE_SIZE ?? 104_857_600), // 100MB
   defaultExpiryHours: Number(env.DEFAULT_EXPIRY_HOURS ?? 168), // 7 days
   databasePath: env.DATABASE_PATH ?? "snag.db",

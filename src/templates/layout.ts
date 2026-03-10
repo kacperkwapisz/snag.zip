@@ -17,13 +17,11 @@ export function layout(
 </head>
 <body class="bg-surface-2 text-text-primary font-sans antialiased min-h-screen flex flex-col">
   <nav class="nav-blur sticky top-0 z-50 border-b border-border/50">
-    <div class="max-w-5xl mx-auto px-6 h-12 flex items-center">
+    <div class="max-w-5xl mx-auto px-6 h-12 flex items-center justify-between">
       <a href="/" class="text-base font-semibold text-text-primary tracking-tight transition-opacity hover:opacity-60">
         snag.zip
       </a>
-      <div class="ml-auto">
-        <a href="/docs" class="text-sm text-text-secondary hover:text-text-primary transition-colors">API</a>
-      </div>
+      <a href="/docs" class="text-sm text-text-secondary hover:text-text-primary transition-colors">API</a>
     </div>
   </nav>
   <main class="${maxW} mx-auto px-6 pt-12 pb-16 flex-1 w-full">
