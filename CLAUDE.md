@@ -32,18 +32,20 @@ src/
   db.ts                 # bun:sqlite schema + prepared statements
   s3.ts                 # S3Client singleton + helpers + multipart upload (AWS SDK)
   routes/
-    pages.ts            # GET / (upload page)
+    pages.ts            # GET / (upload page), GET /docs (API docs)
     upload.ts           # POST /upload + multipart endpoints
     download.ts         # GET/POST /d/:id, GET /d/:id/raw
     folder.ts           # POST /folder, GET /f/:slug, GET /f/:slug/zip
-    admin.ts            # GET /admin, DELETE /admin/files/:id
+    admin.ts            # GET /admin, DELETE /admin/files/:id, POST/DELETE /admin/api-keys
+    api.ts              # REST API under /api/v1/ (Bearer token auth)
   templates/
     layout.ts           # HTML shell (nav, footer, head)
     components.ts       # drop zone, progress bar, file cards, copy button
     upload-page.ts      # upload form + inline JS
     download-page.ts    # file info card, password form, expired page
     folder-page.ts      # folder grid view
-    admin-page.ts       # stats + file table
+    admin-page.ts       # stats + file table + API key management
+    api-docs-page.ts    # API documentation page
   lib/
     id.ts               # nanoid wrapper
     format.ts           # formatBytes, formatDate, timeUntilExpiry, fileExtension, esc, sanitize
@@ -70,8 +72,24 @@ public/
 | POST | `/folder` | Create folder |
 | GET | `/f/:slug` | Folder page |
 | GET | `/f/:slug/zip` | Download folder as zip |
+| GET | `/docs` | API documentation page |
 | GET | `/admin` | Admin dashboard (basic auth) |
 | DELETE | `/admin/files/:id` | Delete file |
+| POST | `/admin/api-keys` | Create API key |
+| DELETE | `/admin/api-keys/:id` | Revoke API key |
+| POST | `/api/v1/files` | API: Upload file |
+| GET | `/api/v1/files` | API: List all files |
+| GET | `/api/v1/files/:id` | API: File metadata |
+| GET | `/api/v1/files/:id/content` | API: Download file |
+| DELETE | `/api/v1/files/:id` | API: Delete file |
+| POST | `/api/v1/files/multipart/init` | API: Init multipart upload |
+| POST | `/api/v1/files/multipart/presign` | API: Presign part URLs |
+| POST | `/api/v1/files/multipart/complete` | API: Complete multipart |
+| POST | `/api/v1/files/multipart/abort` | API: Abort multipart |
+| POST | `/api/v1/folders` | API: Create folder |
+| GET | `/api/v1/folders/:slug` | API: Folder info + files |
+| DELETE | `/api/v1/folders/:slug` | API: Delete folder + files |
+| GET | `/api/v1/stats` | API: Instance stats |
 
 ## Key Gotchas
 

@@ -13,6 +13,7 @@ import { downloadRoutes } from "./routes/download";
 import { folderRoutes } from "./routes/folder";
 import { pageRoutes } from "./routes/pages";
 import { uploadRoutes, cleanupPendingUploads } from "./routes/upload";
+import { apiRoutes } from "./routes/api";
 import { deleteFile } from "./s3";
 import { cleanupExpiredTokens } from "./routes/download";
 
@@ -46,17 +47,47 @@ new Elysia()
       request.headers.get("cf-connecting-ip") ??
       "unknown";
     const url = new URL(request.url);
+    const isApi = url.pathname.startsWith("/api/");
 
-    if (
-      request.method === "POST" &&
-      (url.pathname === "/upload" || url.pathname === "/upload/init")
-    ) {
+    // CORS preflight for API
+    if (isApi && request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }
+
+    // Upload rate limiting
+    const isUploadPath =
+      (request.method === "POST" && url.pathname === "/upload") ||
+      (request.method === "POST" && url.pathname === "/upload/init") ||
+      (request.method === "POST" && url.pathname === "/api/v1/files") ||
+      (request.method === "POST" && url.pathname === "/api/v1/files/multipart/init");
+
+    if (isUploadPath) {
       if (checkRateLimit(uploadRateLimitMap, ip, UPLOAD_RATE_LIMIT)) {
+        if (isApi) {
+          return new Response(
+            JSON.stringify({ error: { code: "rate_limited", message: "Too many uploads" } }),
+            { status: 429, headers: { "Content-Type": "application/json" } },
+          );
+        }
         return new Response("Too many uploads", { status: 429 });
       }
     }
 
     if (checkRateLimit(rateLimitMap, ip, RATE_LIMIT)) {
+      if (isApi) {
+        return new Response(
+          JSON.stringify({ error: { code: "rate_limited", message: "Too many requests" } }),
+          { status: 429, headers: { "Content-Type": "application/json" } },
+        );
+      }
       return new Response("Too many requests", { status: 429 });
     }
   })
@@ -73,11 +104,23 @@ new Elysia()
       );
 
       const url = new URL(request.url);
-      if (url.pathname.startsWith("/upload") && config.publicUploads) {
+      if (url.pathname.startsWith("/api/")) {
+        response.headers.set("Access-Control-Allow-Origin", "*");
+        response.headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+        response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      } else if (url.pathname.startsWith("/upload") && config.publicUploads) {
         response.headers.set("Access-Control-Allow-Origin", "*");
         response.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
         response.headers.set("Access-Control-Allow-Headers", "Content-Type");
       }
+    }
+  })
+  .onError(({ code, request }) => {
+    if (code === "NOT_FOUND" && new URL(request.url).pathname.startsWith("/api/")) {
+      return new Response(
+        JSON.stringify({ error: { code: "not_found", message: "Endpoint not found" } }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      );
     }
   })
   .use(staticPlugin({ prefix: "/public" }))
@@ -86,6 +129,7 @@ new Elysia()
   .use(folderRoutes)
   .use(adminRoutes)
   .use(downloadRoutes)
+  .use(apiRoutes)
   .listen(config.port);
 
 console.log(`snag.zip running at ${config.baseUrl}`);

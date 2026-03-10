@@ -1,10 +1,12 @@
 import { Elysia } from "elysia";
-import { listFiles, getStats, getFile, deleteFileRecord } from "../db";
+import { listFiles, getStats, getFile, deleteFileRecord, insertApiKey, listApiKeys, revokeApiKey } from "../db";
 import { deleteFile } from "../s3";
 import { config } from "../config";
 import { html } from "../lib/http";
 import { adminPage } from "../templates/admin-page";
 import { loginPage } from "../templates/login-page";
+import { generateId } from "../lib/id";
+import { generateApiKey, hashApiKey } from "./api";
 
 const encoder = new TextEncoder();
 
@@ -83,7 +85,7 @@ export const adminRoutes = new Elysia()
         headers: { Location: "/admin/login" },
       });
     }
-    return html(adminPage(listFiles(), getStats()));
+    return html(adminPage(listFiles(), getStats(), listApiKeys()));
   })
   .delete("/admin/files/:id", async ({ request, params }) => {
     if (!(await isAuthenticated(request.headers))) {
@@ -93,5 +95,27 @@ export const adminRoutes = new Elysia()
     if (!file) return new Response("Not found", { status: 404 });
     await deleteFile(file.s3_key);
     deleteFileRecord(file.id);
+    return new Response("OK");
+  })
+  .post("/admin/api-keys", async ({ request }) => {
+    if (!(await isAuthenticated(request.headers))) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    const form = await request.formData();
+    const name = form.get("name")?.toString()?.trim();
+    if (!name) {
+      return Response.json({ error: "Name is required" }, { status: 400 });
+    }
+    const id = generateId();
+    const key = generateApiKey();
+    const keyHash = await hashApiKey(key);
+    insertApiKey({ id, name, key_hash: keyHash });
+    return Response.json({ id, name, key });
+  })
+  .delete("/admin/api-keys/:id", async ({ request, params }) => {
+    if (!(await isAuthenticated(request.headers))) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    revokeApiKey(params.id);
     return new Response("OK");
   });

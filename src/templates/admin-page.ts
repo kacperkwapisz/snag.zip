@@ -1,8 +1,8 @@
 import { layout } from "./layout";
 import { formatBytes, formatDate, timeUntilExpiry, esc } from "../lib/format";
-import type { FileRow, Stats } from "../db";
+import type { FileRow, Stats, ApiKeyRow } from "../db";
 
-export function adminPage(files: FileRow[], stats: Stats): string {
+export function adminPage(files: FileRow[], stats: Stats, apiKeys: Omit<ApiKeyRow, "key_hash">[]): string {
   const rows = files
     .map(
       (f) => `
@@ -51,6 +51,76 @@ export function adminPage(files: FileRow[], stats: Stats): string {
       </div>
     </div>
 
+    <div class="mb-10 animate-fade-in-delay-2">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold tracking-tight text-text-primary">API Keys</h2>
+        <button onclick="showCreateKeyForm()"
+          class="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-xl transition-colors">
+          Create Key
+        </button>
+      </div>
+      <div id="create-key-form" class="card-elevated rounded-2xl p-5 mb-4" style="display:none">
+        <form onsubmit="createApiKey(event)" class="flex gap-3 items-end">
+          <div class="flex-1">
+            <label for="key-name" class="block text-sm font-medium text-text-secondary mb-1.5">Name</label>
+            <input type="text" id="key-name" name="name" required placeholder="e.g. CI pipeline"
+              class="w-full px-3.5 py-2.5 bg-surface-3 border border-border rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/40">
+          </div>
+          <button type="submit" class="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-xl transition-colors">
+            Generate
+          </button>
+        </form>
+      </div>
+      <div id="new-key-display" class="card-elevated rounded-2xl p-5 mb-4 border-2 border-success/30" style="display:none">
+        <p class="text-sm font-medium text-success mb-2">API key created — copy it now, it won't be shown again</p>
+        <div class="flex gap-2 items-center">
+          <code id="new-key-value" class="flex-1 px-3.5 py-2.5 bg-surface-3 rounded-xl text-sm font-mono text-text-primary select-all break-all"></code>
+          <button onclick="copyToClipboard(this, 'Copy')" data-copy=""
+            id="copy-key-btn"
+            class="px-4 py-2.5 bg-surface-3 hover:bg-border text-text-primary text-sm font-medium rounded-xl transition-colors">
+            Copy
+          </button>
+        </div>
+      </div>
+      <div class="card-elevated rounded-2xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              <th class="py-3 px-5">Name</th>
+              <th class="py-3 px-5">Created</th>
+              <th class="py-3 px-5">Last Used</th>
+              <th class="py-3 px-5">Status</th>
+              <th class="py-3 px-5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${apiKeys.length ? apiKeys.map((k) => `
+            <tr class="border-t border-border/50 hover:bg-surface-2 transition-colors" id="key-row-${esc(k.id)}">
+              <td class="py-3.5 px-5 font-medium text-text-primary">${esc(k.name)}</td>
+              <td class="py-3.5 px-5 text-text-secondary tabular-nums">${formatDate(k.created_at)}</td>
+              <td class="py-3.5 px-5 text-text-secondary tabular-nums">${k.last_used_at ? formatDate(k.last_used_at) : "Never"}</td>
+              <td class="py-3.5 px-5">
+                ${k.is_active
+                  ? '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-success/10 text-success">Active</span>'
+                  : '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-danger/10 text-danger">Revoked</span>'}
+              </td>
+              <td class="py-3.5 px-5">
+                ${k.is_active ? `
+                <button onclick="revokeKey('${esc(k.id)}', this)"
+                  class="text-danger hover:opacity-70 text-sm font-medium transition-opacity">Revoke</button>
+                ` : ''}
+              </td>
+            </tr>`).join("") : `
+            <tr><td colspan="5" class="py-10 text-center text-sm text-text-tertiary">No API keys yet</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+      <p class="mt-3 text-xs text-text-tertiary">
+        API documentation available at <a href="/docs" class="text-accent hover:text-accent-hover transition-colors">/docs</a>
+      </p>
+    </div>
+
+    <h2 class="text-xl font-semibold tracking-tight text-text-primary mb-4 animate-fade-in-delay-2">Files</h2>
     <div class="card-elevated rounded-2xl overflow-hidden animate-fade-in-delay-2">
       <table class="w-full text-sm">
         <thead>
@@ -152,6 +222,50 @@ export function adminPage(files: FileRow[], stats: Stats): string {
 
     function deleteFile(id, btn) {
       openDeleteDialog(id, btn);
+    }
+
+    function showCreateKeyForm() {
+      var form = document.getElementById('create-key-form');
+      form.style.display = form.style.display === 'none' ? '' : 'none';
+      if (form.style.display !== 'none') document.getElementById('key-name').focus();
+    }
+
+    function createApiKey(e) {
+      e.preventDefault();
+      var name = document.getElementById('key-name').value.trim();
+      if (!name) return;
+      var form = new FormData();
+      form.append('name', name);
+      fetch('/admin/api-keys', { method: 'POST', body: form }).then(function(res) {
+        return res.json();
+      }).then(function(data) {
+        if (data.error) { showToast(data.error); return; }
+        document.getElementById('create-key-form').style.display = 'none';
+        document.getElementById('key-name').value = '';
+        var display = document.getElementById('new-key-display');
+        var codeEl = document.getElementById('new-key-value');
+        codeEl.textContent = data.key;
+        document.getElementById('copy-key-btn').dataset.copy = data.key;
+        display.style.display = '';
+        showToast('API key created', 'success');
+        setTimeout(function() { location.reload(); }, 10000);
+      });
+    }
+
+    function revokeKey(id, btn) {
+      if (!confirm('Revoke this API key? It will stop working immediately.')) return;
+      fetch('/admin/api-keys/' + id, { method: 'DELETE' }).then(function(res) {
+        if (res.ok) {
+          var row = document.getElementById('key-row-' + id);
+          if (row) {
+            row.classList.add('animate-fade-out');
+            row.addEventListener('animationend', function() { row.remove(); });
+          }
+          showToast('API key revoked', 'success');
+        } else {
+          showToast('Failed to revoke key');
+        }
+      });
     }
   </script>`;
 

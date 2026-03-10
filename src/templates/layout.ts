@@ -21,6 +21,9 @@ export function layout(
       <a href="/" class="text-base font-semibold text-text-primary tracking-tight transition-opacity hover:opacity-60">
         snag.zip
       </a>
+      <div class="ml-auto">
+        <a href="/docs" class="text-sm text-text-secondary hover:text-text-primary transition-colors">API</a>
+      </div>
     </div>
   </nav>
   <main class="${maxW} mx-auto px-6 pt-12 pb-16 flex-1 w-full">

@@ -14,7 +14,7 @@ import { isAuthenticated } from "./admin";
 
 const PART_SIZE = 5 * 1024 * 1024; // 5MB
 
-interface PendingUpload {
+export interface PendingUpload {
   key: string;
   uploadId: string;
   filename: string;
@@ -24,7 +24,7 @@ interface PendingUpload {
   createdAt: number;
 }
 
-const pendingUploads = new Map<string, PendingUpload>();
+export const pendingUploads = new Map<string, PendingUpload>();
 
 export function cleanupPendingUploads() {
   const now = Date.now();
@@ -37,7 +37,7 @@ export function cleanupPendingUploads() {
   }
 }
 
-function parseExpiry(expiry?: string): string | null {
+export function parseExpiry(expiry?: string): string | null {
   if (!expiry) return null;
   const hours = Number(expiry);
   if (hours > 0 && Number.isFinite(hours)) {

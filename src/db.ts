@@ -159,6 +159,65 @@ export function getExpiredFolders(): FolderRow[] {
   return getExpiredFoldersStmt.all() as FolderRow[];
 }
 
+// --- API Key queries ---
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS api_keys (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    last_used_at TEXT,
+    is_active INTEGER DEFAULT 1
+  )
+`);
+
+db.run(`CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)`);
+
+const insertApiKeyStmt = db.prepare(`
+  INSERT INTO api_keys (id, name, key_hash)
+  VALUES ($id, $name, $key_hash)
+`);
+
+const getApiKeyByHashStmt = db.prepare(`SELECT * FROM api_keys WHERE key_hash = ? AND is_active = 1`);
+const listApiKeysStmt = db.prepare(`SELECT id, name, created_at, last_used_at, is_active FROM api_keys ORDER BY created_at DESC`);
+const revokeApiKeyStmt = db.prepare(`UPDATE api_keys SET is_active = 0 WHERE id = ?`);
+const deleteApiKeyStmt = db.prepare(`DELETE FROM api_keys WHERE id = ?`);
+const updateApiKeyLastUsedStmt = db.prepare(`UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?`);
+
+export type ApiKeyRow = {
+  id: string;
+  name: string;
+  key_hash: string;
+  created_at: string;
+  last_used_at: string | null;
+  is_active: number;
+};
+
+export function insertApiKey(apiKey: { id: string; name: string; key_hash: string }) {
+  insertApiKeyStmt.run({ id: apiKey.id, name: apiKey.name, key_hash: apiKey.key_hash });
+}
+
+export function getApiKeyByHash(keyHash: string): ApiKeyRow | null {
+  return getApiKeyByHashStmt.get(keyHash) as ApiKeyRow | null;
+}
+
+export function listApiKeys(): Omit<ApiKeyRow, "key_hash">[] {
+  return listApiKeysStmt.all() as Omit<ApiKeyRow, "key_hash">[];
+}
+
+export function revokeApiKey(id: string) {
+  revokeApiKeyStmt.run(id);
+}
+
+export function deleteApiKey(id: string) {
+  deleteApiKeyStmt.run(id);
+}
+
+export function updateApiKeyLastUsed(id: string) {
+  updateApiKeyLastUsedStmt.run(id);
+}
+
 // --- Stats ---
 
 const statsStmt = db.prepare(`
