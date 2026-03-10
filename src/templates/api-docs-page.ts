@@ -2,7 +2,7 @@ import { layout } from "./layout";
 import { config } from "../config";
 
 function code(text: string): string {
-  return `<code class="px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono">${text}</code>`;
+  return `<code class="px-1.5 py-0.5 bg-surface-3 rounded-md text-xs font-mono text-text-primary">${text}</code>`;
 }
 
 function codeBlock(code: string): string {
@@ -32,9 +32,9 @@ function endpoint(
   },
 ): string {
   const methodColors: Record<string, string> = {
-    GET: "bg-success/10 text-success border border-success/20",
-    POST: "bg-accent/10 text-accent border border-accent/20",
-    DELETE: "bg-danger/10 text-danger border border-danger/20",
+    GET: "bg-success/15 text-success border border-success/25",
+    POST: "bg-accent/15 text-accent-hover border border-accent/25",
+    DELETE: "bg-danger/10 text-danger border border-danger/25",
   };
   const color = methodColors[method] ?? "bg-surface-3 text-text-secondary";
 
@@ -43,7 +43,7 @@ function endpoint(
   if (details.body) {
     sections.push(`
       <div>
-        <p class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Request</p>
+        <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">Request</p>
         ${codeBlock(details.body)}
       </div>`);
   }
@@ -51,28 +51,28 @@ function endpoint(
   if (details.query) {
     sections.push(`
       <div>
-        <p class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Parameters</p>
+        <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">Parameters</p>
         ${codeBlock(details.query)}
       </div>`);
   }
 
   sections.push(`
     <div>
-      <p class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">Response</p>
+      <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">Response</p>
       ${codeBlock(details.response)}
     </div>`);
 
   return `
     <div class="py-7 first:pt-0">
       <div class="flex items-center gap-3 mb-2">
-        <span class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-bold tracking-wide ${color}">${method}</span>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-bold tracking-wide ${color}">${method}</span>
         <code class="text-[13px] font-mono text-text-primary font-semibold">${path}</code>
       </div>
       <p class="text-sm text-text-secondary mb-5 text-pretty">${description}</p>
       <div class="space-y-4">
         ${sections.join("")}
       </div>
-      ${details.notes ? `<p class="text-xs text-text-tertiary mt-4 leading-relaxed">${details.notes}</p>` : ""}
+      ${details.notes ? `<p class="text-xs text-text-secondary mt-4 leading-relaxed">${details.notes}</p>` : ""}
     </div>`;
 }
 
@@ -95,7 +95,7 @@ export function apiDocsPage(): string {
     <section class="card-elevated rounded-2xl p-8 mb-6 animate-fade-in-delay-1">
       <h2 class="text-xl font-semibold text-text-primary mb-2">Quick Start</h2>
       <p class="text-sm text-text-secondary mb-5 text-pretty">
-        Get an API key from the <a href="/admin" class="text-accent hover:text-accent-hover transition-colors">admin dashboard</a>, then start making requests:
+        Get an API key from the <a href="/admin" class="text-accent hover:text-accent-hover transition-colors underline decoration-accent/50 underline-offset-2">admin dashboard</a>, then start making requests:
       </p>
       ${codeBlock(`
 # Upload a file
@@ -131,8 +131,8 @@ curl ${base}/api/v1/files \\
           All requests require an API key via the ${code("Authorization")} header.
         </p>
         ${codeBlock("Authorization: Bearer snag_your_key_here")}
-        <p class="text-xs text-text-tertiary mt-4 leading-relaxed">
-          Create keys in the <a href="/admin" class="text-accent hover:text-accent-hover transition-colors">admin dashboard</a>.
+        <p class="text-xs text-text-secondary mt-4 leading-relaxed">
+          Create keys in the <a href="/admin" class="text-accent hover:text-accent-hover transition-colors underline decoration-accent/50 underline-offset-2">admin dashboard</a>.
           Keys are prefixed with ${code("snag_")} for easy identification.
         </p>
       </section>
@@ -157,7 +157,7 @@ curl ${base}/api/v1/files \\
               <span class="text-text-primary font-medium tabular-nums">10 / min</span>
             </div>
           </div>
-          <p class="text-xs text-text-tertiary mt-4">Per IP address. Returns ${code("429")} with ${code("rate_limited")} error code.</p>
+          <p class="text-xs text-text-secondary mt-4">Per IP address. Returns ${code("429")} with ${code("rate_limited")} error code.</p>
         </section>
       </div>
     </div>
@@ -177,7 +177,7 @@ curl ${base}/api/v1/files \\
 }
       `)}
       <div class="mt-6 space-y-0">
-        <div class="grid grid-cols-[3rem_1fr_1fr] gap-x-4 py-2.5 text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+        <div class="grid grid-cols-[3rem_1fr_1fr] gap-x-4 py-2.5 text-xs font-semibold text-text-secondary uppercase tracking-wider">
           <span>HTTP</span><span>Code</span><span>Description</span>
         </div>
         ${[
