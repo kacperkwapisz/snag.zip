@@ -1,3 +1,16 @@
+import { readFileSync } from "fs";
+
+const cssHash = (() => {
+  try {
+    const buf = readFileSync("public/styles.css");
+    const hasher = new Bun.CryptoHasher("md5");
+    hasher.update(buf);
+    return hasher.digest("hex").slice(0, 8);
+  } catch {
+    return Date.now().toString(36);
+  }
+})();
+
 export function layout(
   title: string,
   body: string,
@@ -13,7 +26,7 @@ export function layout(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title} - snag.zip</title>
   <meta name="description" content="snag.zip — self-hosted file sharing. Upload a file, get a short link.">
-  <link rel="stylesheet" href="/public/styles.css">
+  <link rel="stylesheet" href="/public/styles.css?v=${cssHash}">
   <link rel="icon" href="/public/favicon.ico">
 </head>
 <body class="bg-surface-2 text-text-primary font-sans antialiased min-h-screen flex flex-col">

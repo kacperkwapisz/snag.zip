@@ -69,22 +69,22 @@ export function adminPage(
   const body = `
     <h1 class="text-4xl font-semibold tracking-tight text-text-primary mb-10 animate-fade-in text-balance">Admin</h1>
 
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10 animate-fade-in-delay-1">
-      <div class="card-elevated card-hoverable rounded-2xl p-6">
-        <p class="text-sm font-medium text-text-secondary mb-1">Files</p>
-        <p class="text-3xl font-semibold text-text-primary tabular-nums">${stats.total_files}</p>
+    <div class="grid grid-cols-4 gap-3 mb-10 animate-fade-in-delay-1">
+      <div class="card-elevated rounded-2xl px-5 py-4">
+        <p class="text-xs font-medium text-text-secondary mb-0.5">Files</p>
+        <p class="text-2xl font-semibold text-text-primary tabular-nums">${stats.total_files}</p>
       </div>
-      <div class="card-elevated card-hoverable rounded-2xl p-6">
-        <p class="text-sm font-medium text-text-secondary mb-1">Folders</p>
-        <p class="text-3xl font-semibold text-text-primary tabular-nums">${stats.total_folders}</p>
+      <div class="card-elevated rounded-2xl px-5 py-4">
+        <p class="text-xs font-medium text-text-secondary mb-0.5">Folders</p>
+        <p class="text-2xl font-semibold text-text-primary tabular-nums">${stats.total_folders}</p>
       </div>
-      <div class="card-elevated card-hoverable rounded-2xl p-6">
-        <p class="text-sm font-medium text-text-secondary mb-1">Total Size</p>
-        <p class="text-3xl font-semibold text-text-primary tabular-nums">${formatBytes(stats.total_size)}</p>
+      <div class="card-elevated rounded-2xl px-5 py-4">
+        <p class="text-xs font-medium text-text-secondary mb-0.5">Total Size</p>
+        <p class="text-2xl font-semibold text-text-primary tabular-nums">${formatBytes(stats.total_size)}</p>
       </div>
-      <div class="card-elevated card-hoverable rounded-2xl p-6">
-        <p class="text-sm font-medium text-text-secondary mb-1">Downloads</p>
-        <p class="text-3xl font-semibold text-text-primary tabular-nums">${stats.total_downloads}</p>
+      <div class="card-elevated rounded-2xl px-5 py-4">
+        <p class="text-xs font-medium text-text-secondary mb-0.5">Downloads</p>
+        <p class="text-2xl font-semibold text-text-primary tabular-nums">${stats.total_downloads}</p>
       </div>
     </div>
 
