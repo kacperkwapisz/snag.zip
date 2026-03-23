@@ -38,6 +38,7 @@ src/
     folder.ts           # POST /folder, GET /f/:slug, GET /f/:slug/zip
     admin.ts            # GET /admin, DELETE /admin/files/:id, POST/DELETE /admin/api-keys
     api.ts              # REST API under /api/v1/ (Bearer token auth)
+    mcp.ts              # MCP server at /mcp (Streamable HTTP transport)
   templates/
     layout.ts           # HTML shell (nav, footer, head)
     components.ts       # drop zone, progress bar, file cards, copy button
@@ -90,6 +91,7 @@ public/
 | GET | `/api/v1/folders/:slug` | API: Folder info + files |
 | DELETE | `/api/v1/folders/:slug` | API: Delete folder + files |
 | GET | `/api/v1/stats` | API: Instance stats |
+| ALL | `/mcp` | MCP server (Streamable HTTP) |
 
 ## Key Gotchas
 
@@ -100,6 +102,7 @@ public/
 - **Filenames**: `sanitizeFilename()` strips `../`, leading `/`, null bytes. `safeContentDisposition()` handles RFC 5987 encoding.
 - **Large file uploads (≥10MB)** use S3 multipart upload via `@aws-sdk/client-s3`. Client uploads 5MB chunks directly to R2 via presigned PUT URLs (3 concurrent, 3 retries). Requires R2 CORS config allowing PUT from the app's origin with `ETag` exposed.
 - **R2 CORS** must be configured in Cloudflare dashboard: `AllowedOrigins: [domain]`, `AllowedMethods: [PUT]`, `AllowedHeaders: [Content-Type]`, `ExposeHeaders: [ETag]`.
+- **MCP server** at `/mcp` uses Streamable HTTP transport (stateless). Tools: `create_text_file`, `upload_file` (base64), `upload_from_url` (server-side fetch with SSRF protection), `list_files`, `get_file_info`, `create_folder`, `list_folders`. `MCP_MAX_URL_FILE_SIZE` env var overrides `MAX_FILE_SIZE` for URL uploads.
 
 ## UI Direction
 

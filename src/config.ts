@@ -21,4 +21,5 @@ export const config = {
   maxFileSize: Number(env.MAX_FILE_SIZE ?? 104_857_600), // 100MB
   defaultExpiryHours: Number(env.DEFAULT_EXPIRY_HOURS ?? 168), // 7 days
   databasePath: env.DATABASE_PATH ?? "snag.db",
+  mcpMaxUrlFileSize: env.MCP_MAX_URL_FILE_SIZE ? Number(env.MCP_MAX_URL_FILE_SIZE) : null,
 } as const;

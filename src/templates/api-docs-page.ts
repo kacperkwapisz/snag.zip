@@ -461,6 +461,8 @@ folder_id   string  (optional) Add to an existing folder
           </div>
           ${[
             ["create_text_file", "Create a .txt, .md, or .json file and get a shareable download link"],
+            ["upload_file", "Upload any file type via base64 encoding (screenshots, images, snippets)"],
+            ["upload_from_url", "Fetch a file from a URL and store it (PDFs, datasets, archives)"],
             ["list_files", "List all uploaded files with metadata and download URLs"],
             ["get_file_info", "Get metadata for a specific file by its ID"],
             ["create_folder", "Create a folder to group files together"],
@@ -477,20 +479,53 @@ folder_id   string  (optional) Add to an existing folder
         </div>
       </div>
 
-      <div>
-        <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">${code("create_text_file")} Parameters</p>
-        ${codeBlock(`
+      <div class="space-y-6">
+        <div>
+          <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">${code("create_text_file")} Parameters</p>
+          ${codeBlock(`
 filename      string  (required) Filename with extension (.txt, .md, .json only)
 content       string  (required) Text content of the file
 expiry_hours  number  (optional) Hours until expiration (max 8760)
 password      string  (optional) Password-protect the download
 folder_id     string  (optional) Add to an existing folder
-        `)}
-        <p class="text-xs text-text-secondary mt-4 leading-relaxed">
-          Only ${code(".txt")}, ${code(".md")}, and ${code(".json")} files are supported.
-          All app settings (expiry rules, max file size) are enforced.
-        </p>
+          `)}
+          <p class="text-xs text-text-secondary mt-3 leading-relaxed">
+            Only ${code(".txt")}, ${code(".md")}, and ${code(".json")} files are supported.
+          </p>
+        </div>
+
+        <div class="border-t border-border/30 pt-6">
+          <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">${code("upload_file")} Parameters</p>
+          ${codeBlock(`
+filename        string  (required) Filename with extension (any type allowed)
+content_base64  string  (required) Base64-encoded file content
+expiry_hours    number  (optional) Hours until expiration (max 8760)
+password        string  (optional) Password-protect the download
+folder_id       string  (optional) Add to an existing folder
+          `)}
+          <p class="text-xs text-text-secondary mt-3 leading-relaxed">
+            Any file type is allowed. Best for small files like screenshots or images.
+          </p>
+        </div>
+
+        <div class="border-t border-border/30 pt-6">
+          <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">${code("upload_from_url")} Parameters</p>
+          ${codeBlock(`
+url           string  (required) URL to fetch (http/https only)
+filename      string  (optional) Override filename (derived from URL if omitted)
+expiry_hours  number  (optional) Hours until expiration (max 8760)
+password      string  (optional) Password-protect the download
+folder_id     string  (optional) Add to an existing folder
+          `)}
+          <p class="text-xs text-text-secondary mt-3 leading-relaxed">
+            The server fetches the file directly — no base64 overhead. SSRF protection prevents fetching from private/internal addresses.
+          </p>
+        </div>
       </div>
+
+      <p class="text-xs text-text-secondary mt-6 leading-relaxed">
+        All tools enforce app settings (expiry rules, max file size). ${code("upload_from_url")} size limit can be configured separately via ${code("MCP_MAX_URL_FILE_SIZE")}.
+      </p>
     </section>
   `;
 

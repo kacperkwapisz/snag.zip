@@ -46,6 +46,7 @@ bun run dev
 | `MAX_FILE_SIZE` | `104857600` | Max upload size in bytes (100MB) |
 | `DEFAULT_EXPIRY_HOURS` | `168` | Link expiry in hours (7 days) |
 | `DATABASE_PATH` | `snag.db` | SQLite database file path |
+| `MCP_MAX_URL_FILE_SIZE` | `MAX_FILE_SIZE` | Max size for MCP URL uploads (defaults to MAX_FILE_SIZE) |
 
 ## S3/R2 CORS Configuration
 
@@ -75,7 +76,9 @@ snag.zip includes a built-in [MCP](https://modelcontextprotocol.io) server at `/
 
 | Tool | Description |
 |------|-------------|
-| `create_text_file` | Create a text file and get a shareable link |
+| `create_text_file` | Create a text file (.txt, .md, .json) and get a shareable link |
+| `upload_file` | Upload a binary file (base64-encoded) — any file type |
+| `upload_from_url` | Fetch a file from a URL and store it (no base64 overhead) |
 | `list_files` | List all uploaded files |
 | `get_file_info` | Get metadata for a specific file |
 | `create_folder` | Create a folder to group files |
