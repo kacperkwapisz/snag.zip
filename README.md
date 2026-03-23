@@ -9,6 +9,7 @@ Self-hosted file sharing. Upload a file, get a short link.
 - Expiring links with configurable TTL
 - Folder sharing (group files, download as zip)
 - Admin dashboard with file management
+- MCP server for AI agent integration
 - Light/dark mode (automatic)
 
 ## Stack
@@ -65,6 +66,28 @@ For **Cloudflare R2**, go to your bucket settings in the Cloudflare dashboard an
 ```
 
 Replace `https://your-domain.com` with your `BASE_URL`. For local development, use `http://localhost:3000`.
+
+## MCP Server
+
+snag.zip includes a built-in [MCP](https://modelcontextprotocol.io) server at `/mcp` using Streamable HTTP transport. AI agents can create text files (`.txt`, `.md`, `.json`), list files/folders, and create folders.
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `create_text_file` | Create a text file and get a shareable link |
+| `list_files` | List all uploaded files |
+| `get_file_info` | Get metadata for a specific file |
+| `create_folder` | Create a folder to group files |
+| `list_folders` | List all folders |
+
+### Connect an MCP Client
+
+Use Streamable HTTP transport with:
+
+```
+URL: https://your-instance.com/mcp
+```
 
 ## Scripts
 

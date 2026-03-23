@@ -87,7 +87,7 @@ export function apiDocsPage(): string {
     <div class="animate-fade-in">
       <h1 class="text-4xl font-semibold tracking-tight text-text-primary mb-3 text-balance">API Reference</h1>
       <p class="text-lg text-text-secondary mb-12 text-pretty">
-        Upload, download, and manage files programmatically.
+        Upload, download, and manage files programmatically. Includes an MCP server for AI agents.
       </p>
     </div>
 
@@ -424,7 +424,7 @@ folder_id   string  (optional) Add to an existing folder
     </section>
 
     <!-- Stats -->
-    <section class="card-elevated rounded-2xl p-8 animate-fade-in-delay-2">
+    <section class="card-elevated rounded-2xl p-8 mb-6 animate-fade-in-delay-2">
       <h2 class="text-xl font-semibold text-text-primary mb-1">Stats</h2>
 
       ${endpoint("GET", "/api/v1/stats", "Get instance-wide statistics.", {
@@ -437,6 +437,60 @@ folder_id   string  (optional) Add to an existing folder
         `,
         notes: `${code("total_size")} is in bytes.`,
       })}
+    </section>
+
+    <!-- MCP Server -->
+    <section class="card-elevated rounded-2xl p-8 animate-fade-in-delay-2">
+      <h2 class="text-xl font-semibold text-text-primary mb-2">MCP Server</h2>
+      <p class="text-sm text-text-secondary mb-5 text-pretty">
+        snag.zip includes a built-in <a href="https://modelcontextprotocol.io" class="text-accent hover:text-accent-hover transition-colors underline decoration-accent/50 underline-offset-2">Model Context Protocol</a> (MCP) server
+        so AI agents can create and share text files directly. Connect any MCP-compatible client using Streamable HTTP transport.
+      </p>
+
+      <div class="mb-6">
+        <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">Endpoint</p>
+        ${codeBlock(`${base}/mcp`)}
+        <p class="text-xs text-text-secondary mt-3 leading-relaxed">Transport: Streamable HTTP. No authentication required.</p>
+      </div>
+
+      <div class="mb-6">
+        <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">Available Tools</p>
+        <div class="space-y-0">
+          <div class="grid grid-cols-[10rem_1fr] gap-x-4 py-2.5 text-xs font-semibold text-text-secondary uppercase tracking-wider">
+            <span>Tool</span><span>Description</span>
+          </div>
+          ${[
+            ["create_text_file", "Create a .txt, .md, or .json file and get a shareable download link"],
+            ["list_files", "List all uploaded files with metadata and download URLs"],
+            ["get_file_info", "Get metadata for a specific file by its ID"],
+            ["create_folder", "Create a folder to group files together"],
+            ["list_folders", "List all folders with URLs"],
+          ]
+            .map(
+              ([tool, desc]) => `
+          <div class="grid grid-cols-[10rem_1fr] gap-x-4 py-2.5 border-t border-border/30 text-sm">
+            <span class="font-mono text-xs text-text-primary">${tool}</span>
+            <span class="text-text-secondary">${desc}</span>
+          </div>`,
+            )
+            .join("")}
+        </div>
+      </div>
+
+      <div>
+        <p class="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2.5">${code("create_text_file")} Parameters</p>
+        ${codeBlock(`
+filename      string  (required) Filename with extension (.txt, .md, .json only)
+content       string  (required) Text content of the file
+expiry_hours  number  (optional) Hours until expiration (max 8760)
+password      string  (optional) Password-protect the download
+folder_id     string  (optional) Add to an existing folder
+        `)}
+        <p class="text-xs text-text-secondary mt-4 leading-relaxed">
+          Only ${code(".txt")}, ${code(".md")}, and ${code(".json")} files are supported.
+          All app settings (expiry rules, max file size) are enforced.
+        </p>
+      </div>
     </section>
   `;
 
