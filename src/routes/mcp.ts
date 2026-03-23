@@ -10,13 +10,16 @@ import {
   insertFile,
   getFile,
   listFiles,
+  getFolder,
   insertFolder,
   listFolders,
 } from "../db";
 import { parseExpiry } from "./upload";
 import { lookup as dnsLookup } from "node:dns/promises";
 
-const ALLOWED_EXTENSIONS: Record<string, string> = {
+// --- Helpers ---
+
+const ALLOWED_TEXT_EXTENSIONS: Record<string, string> = {
   txt: "text/plain",
   md: "text/markdown",
   json: "application/json",
@@ -38,49 +41,230 @@ function mimeFromFilename(filename: string): string {
   return MIME_MAP[ext] ?? "application/octet-stream";
 }
 
+function mcpError(text: string) {
+  return { content: [{ type: "text" as const, text }], isError: true };
+}
+
+function mcpResult(data: Record<string, unknown>) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+}
+
+/** Ensure filename has a basename (not just ".md" or empty) */
+function ensureBasename(filename: string, fallback: string): string {
+  const name = sanitizeFilename(filename);
+  if (!name) return fallback;
+  // If name starts with a dot and has no basename (e.g. ".md"), prepend fallback
+  if (name.startsWith(".") && !name.slice(1).includes(".")) return fallback + name;
+  return name;
+}
+
+/** Validate folder_id exists if provided */
+function validateFolderId(folderId: string | undefined): string | null {
+  if (!folderId) return null;
+  const folder = getFolder(folderId);
+  if (!folder) return `Folder "${folderId}" not found`;
+  return null;
+}
+
+/** Upload to S3 + insert DB record. Returns result or error. */
+async function doUpload(opts: {
+  filename: string;
+  data: Uint8Array | Buffer;
+  contentType: string;
+  expiry_hours?: number;
+  password?: string;
+  folder_id?: string;
+  extra?: Record<string, unknown>;
+}) {
+  const id = generateId();
+  const s3Key = `files/${id}/${opts.filename}`;
+
+  try {
+    await uploadFile(s3Key, opts.data, opts.filename);
+  } catch (err) {
+    return mcpError(`Error: S3 upload failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  const expiresAt = parseExpiry(opts.expiry_hours?.toString());
+
+  let passwordHash: string | null = null;
+  if (opts.password) {
+    passwordHash = await Bun.password.hash(opts.password);
+  }
+
+  try {
+    insertFile({
+      id,
+      filename: opts.filename,
+      size: opts.data.byteLength,
+      type: opts.contentType,
+      s3_key: s3Key,
+      folder_id: opts.folder_id ?? null,
+      expires_at: expiresAt,
+      password_hash: passwordHash,
+    });
+  } catch (err) {
+    return mcpError(`Error: Database insert failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return mcpResult({
+    id,
+    url: `${config.baseUrl}/d/${id}`,
+    filename: opts.filename,
+    size: opts.data.byteLength,
+    expires_at: expiresAt,
+    ...opts.extra,
+  });
+}
+
+// --- SSRF protection ---
+
 function isPrivateIp(ip: string): boolean {
-  // IPv4 private/reserved ranges
   const parts = ip.split(".").map(Number);
   if (parts.length === 4 && parts.every((n) => n >= 0 && n <= 255)) {
-    if (parts[0] === 127) return true;                          // 127.0.0.0/8
-    if (parts[0] === 10) return true;                           // 10.0.0.0/8
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12
-    if (parts[0] === 192 && parts[1] === 168) return true;     // 192.168.0.0/16
-    if (parts[0] === 169 && parts[1] === 254) return true;     // 169.254.0.0/16 (link-local/AWS metadata)
-    if (parts[0] === 0) return true;                            // 0.0.0.0/8
+    if (parts[0] === 127) return true;
+    if (parts[0] === 10) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    if (parts[0] === 0) return true;
   }
-  // IPv6 loopback and private
   if (ip === "::1" || ip === "::") return true;
-  if (ip.startsWith("fc") || ip.startsWith("fd")) return true; // fc00::/7
-  if (ip.startsWith("fe80")) return true;                       // link-local
+  if (ip.startsWith("fc") || ip.startsWith("fd")) return true;
+  if (ip.startsWith("fe80")) return true;
   return false;
 }
 
-async function validateUrlSafety(url: string): Promise<string | null> {
+async function resolveAndValidate(hostname: string): Promise<{ ip: string } | { error: string }> {
+  // Direct IP check
+  if (isPrivateIp(hostname)) {
+    return { error: "URL points to a private/internal IP address" };
+  }
+  try {
+    const { address } = await dnsLookup(hostname);
+    if (isPrivateIp(address)) {
+      return { error: "URL resolves to a private/internal IP address" };
+    }
+    return { ip: address };
+  } catch {
+    return { error: `Could not resolve hostname "${hostname}"` };
+  }
+}
+
+async function safeFetch(sourceUrl: string, maxSize: number): Promise<
+  { response: Response; data: Uint8Array } | { error: string }
+> {
+  // Validate URL
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(sourceUrl);
   } catch {
-    return "Invalid URL";
+    return { error: "Invalid URL" };
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return `Protocol "${parsed.protocol}" is not allowed. Only http: and https: are supported.`;
+    return { error: `Protocol "${parsed.protocol}" is not allowed. Only http: and https: are supported.` };
   }
-  // Check if hostname is a direct IP
-  if (isPrivateIp(parsed.hostname)) {
-    return "URL points to a private/internal IP address";
-  }
-  // Resolve hostname and check for private IPs
+
+  // Resolve DNS and check for private IPs
+  const dnsResult = await resolveAndValidate(parsed.hostname);
+  if ("error" in dnsResult) return dnsResult;
+
+  // Fetch with timeout + redirect disabled to prevent SSRF via redirect
+  let response: Response;
   try {
-    const { address } = await dnsLookup(parsed.hostname);
-    if (isPrivateIp(address)) {
-      return "URL resolves to a private/internal IP address";
-    }
-  } catch {
-    return `Could not resolve hostname "${parsed.hostname}"`;
+    response = await fetch(sourceUrl, {
+      signal: AbortSignal.timeout(30_000),
+      redirect: "manual",
+    });
+  } catch (err) {
+    const msg = err instanceof Error && err.name === "TimeoutError"
+      ? "Request timed out after 30 seconds"
+      : `Failed to fetch URL: ${err instanceof Error ? err.message : String(err)}`;
+    return { error: msg };
   }
-  return null;
+
+  // Handle redirects manually to validate each hop
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("location");
+    if (!location) return { error: "Redirect with no Location header" };
+
+    let redirectUrl: URL;
+    try {
+      redirectUrl = new URL(location, sourceUrl);
+    } catch {
+      return { error: "Redirect to invalid URL" };
+    }
+    if (redirectUrl.protocol !== "http:" && redirectUrl.protocol !== "https:") {
+      return { error: `Redirect to disallowed protocol "${redirectUrl.protocol}"` };
+    }
+    const redirectDns = await resolveAndValidate(redirectUrl.hostname);
+    if ("error" in redirectDns) {
+      return { error: `Redirect blocked: ${redirectDns.error}` };
+    }
+
+    // Follow the validated redirect (max 1 hop to keep it simple)
+    try {
+      response = await fetch(redirectUrl.href, {
+        signal: AbortSignal.timeout(30_000),
+        redirect: "manual",
+      });
+    } catch (err) {
+      const msg = err instanceof Error && err.name === "TimeoutError"
+        ? "Request timed out after 30 seconds"
+        : `Failed to fetch redirect: ${err instanceof Error ? err.message : String(err)}`;
+      return { error: msg };
+    }
+
+    // If still redirecting, bail
+    if (response.status >= 300 && response.status < 400) {
+      return { error: "Too many redirects" };
+    }
+  }
+
+  if (!response.ok) {
+    return { error: `URL returned HTTP ${response.status} ${response.statusText}` };
+  }
+
+  // Pre-check Content-Length
+  const contentLength = response.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > maxSize) {
+    return { error: `File too large (${contentLength} bytes). Max size is ${maxSize} bytes.` };
+  }
+
+  // Stream body with size limit to prevent memory exhaustion
+  const reader = response.body?.getReader();
+  if (!reader) return { error: "No response body" };
+
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalSize += value.byteLength;
+      if (totalSize > maxSize) {
+        reader.cancel();
+        return { error: `Downloaded file exceeds max size (${maxSize} bytes). Download aborted.` };
+      }
+      chunks.push(value);
+    }
+  } catch (err) {
+    return { error: `Download failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  // Concatenate chunks
+  const data = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return { response, data };
 }
+
+// --- URL filename helpers ---
 
 function filenameFromUrl(url: string): string {
   try {
@@ -95,7 +279,6 @@ function filenameFromUrl(url: string): string {
 
 function filenameFromContentDisposition(header: string | null): string | null {
   if (!header) return null;
-  // Try filename*= (RFC 5987) first, then filename=
   const starMatch = header.match(/filename\*=(?:UTF-8''|utf-8'')([^;\s]+)/i);
   if (starMatch) {
     try { return decodeURIComponent(starMatch[1]); } catch { /* fall through */ }
@@ -104,7 +287,14 @@ function filenameFromContentDisposition(header: string | null): string | null {
   return match?.[1] ?? null;
 }
 
-const BASE64_REGEX = /^[A-Za-z0-9+/]*={0,2}$/;
+// Base64 with optional whitespace/newlines (some encoders add them)
+const BASE64_REGEX = /^[A-Za-z0-9+/\s]*={0,2}\s*$/;
+
+function cleanBase64(input: string): string {
+  return input.replace(/\s/g, "");
+}
+
+// --- MCP Server ---
 
 function createMcpServer() {
   const mcp = new McpServer({
@@ -124,63 +314,34 @@ function createMcpServer() {
       folder_id: z.string().optional().describe("Optional folder ID to add the file to"),
     },
   }, async ({ filename, content, expiry_hours, password, folder_id }) => {
-    const safeName = sanitizeFilename(filename) || "unnamed.txt";
+    const safeName = ensureBasename(filename, "unnamed.txt");
     const ext = safeName.split(".").pop()?.toLowerCase() ?? "";
 
-    if (!ALLOWED_EXTENSIONS[ext]) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Error: Only .txt, .md, and .json files are allowed. Got ".${ext}". Please use a .txt extension instead.`,
-        }],
-        isError: true,
-      };
+    if (!ALLOWED_TEXT_EXTENSIONS[ext]) {
+      return mcpError(`Error: Only .txt, .md, and .json files are allowed. Got ".${ext}". Please use a .txt extension instead.`);
     }
+
+    const folderError = validateFolderId(folder_id);
+    if (folderError) return mcpError(`Error: ${folderError}`);
 
     const data = new TextEncoder().encode(content);
 
     if (data.byteLength > config.maxFileSize) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Error: Content size (${data.byteLength} bytes) exceeds max file size (${config.maxFileSize} bytes)`,
-        }],
-        isError: true,
-      };
+      return mcpError(`Error: Content size (${data.byteLength} bytes) exceeds max file size (${config.maxFileSize} bytes)`);
     }
 
-    const contentType = ALLOWED_EXTENSIONS[ext];
-    const id = generateId();
-    const s3Key = `files/${id}/${safeName}`;
-
-    await uploadFile(s3Key, data, safeName);
-
-    const expiresAt = parseExpiry(expiry_hours?.toString());
-
-    let passwordHash: string | null = null;
-    if (password) {
-      passwordHash = await Bun.password.hash(password);
+    if (data.byteLength === 0) {
+      return mcpError("Error: File content is empty");
     }
 
-    insertFile({
-      id,
+    return doUpload({
       filename: safeName,
-      size: data.byteLength,
-      type: contentType,
-      s3_key: s3Key,
-      folder_id: folder_id ?? null,
-      expires_at: expiresAt,
-      password_hash: passwordHash,
+      data,
+      contentType: ALLOWED_TEXT_EXTENSIONS[ext],
+      expiry_hours,
+      password,
+      folder_id,
     });
-
-    const url = `${config.baseUrl}/d/${id}`;
-
-    return {
-      content: [{
-        type: "text" as const,
-        text: JSON.stringify({ id, url, filename: safeName, size: data.byteLength, expires_at: expiresAt }, null, 2),
-      }],
-    };
   });
 
   mcp.registerTool("upload_file", {
@@ -195,73 +356,40 @@ function createMcpServer() {
       folder_id: z.string().optional().describe("Optional folder ID to add the file to"),
     },
   }, async ({ filename, content_base64, expiry_hours, password, folder_id }) => {
-    const safeName = sanitizeFilename(filename) || "unnamed";
+    const safeName = ensureBasename(filename, "unnamed");
 
-    // Early size check before decoding (base64 is ~33% larger than raw)
-    if (content_base64.length > config.maxFileSize * 1.4) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Error: File too large. Max size is ${config.maxFileSize} bytes.`,
-        }],
-        isError: true,
-      };
-    }
+    const folderError = validateFolderId(folder_id);
+    if (folderError) return mcpError(`Error: ${folderError}`);
 
     if (!BASE64_REGEX.test(content_base64)) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: "Error: Invalid base64 content. The content_base64 field must contain valid base64-encoded data.",
-        }],
-        isError: true,
-      };
+      return mcpError("Error: Invalid base64 content. The content_base64 field must contain valid base64-encoded data.");
     }
 
-    const data = Buffer.from(content_base64, "base64");
+    const cleaned = cleanBase64(content_base64);
+
+    // Early size check before decoding (base64 is ~33% larger than raw)
+    if (cleaned.length > config.maxFileSize * 1.4) {
+      return mcpError(`Error: File too large. Max size is ${config.maxFileSize} bytes.`);
+    }
+
+    const data = Buffer.from(cleaned, "base64");
+
+    if (data.byteLength === 0) {
+      return mcpError("Error: File content is empty (base64 decoded to 0 bytes)");
+    }
 
     if (data.byteLength > config.maxFileSize) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Error: File size (${data.byteLength} bytes) exceeds max file size (${config.maxFileSize} bytes)`,
-        }],
-        isError: true,
-      };
+      return mcpError(`Error: File size (${data.byteLength} bytes) exceeds max file size (${config.maxFileSize} bytes)`);
     }
 
-    const contentType = mimeFromFilename(safeName);
-    const id = generateId();
-    const s3Key = `files/${id}/${safeName}`;
-
-    await uploadFile(s3Key, data, safeName);
-
-    const expiresAt = parseExpiry(expiry_hours?.toString());
-
-    let passwordHash: string | null = null;
-    if (password) {
-      passwordHash = await Bun.password.hash(password);
-    }
-
-    insertFile({
-      id,
+    return doUpload({
       filename: safeName,
-      size: data.byteLength,
-      type: contentType,
-      s3_key: s3Key,
-      folder_id: folder_id ?? null,
-      expires_at: expiresAt,
-      password_hash: passwordHash,
+      data,
+      contentType: mimeFromFilename(safeName),
+      expiry_hours,
+      password,
+      folder_id,
     });
-
-    const url = `${config.baseUrl}/d/${id}`;
-
-    return {
-      content: [{
-        type: "text" as const,
-        text: JSON.stringify({ id, url, filename: safeName, size: data.byteLength, expires_at: expiresAt }, null, 2),
-      }],
-    };
   });
 
   mcp.registerTool("upload_from_url", {
@@ -278,73 +406,24 @@ function createMcpServer() {
   }, async ({ url: sourceUrl, filename: overrideFilename, expiry_hours, password, folder_id }) => {
     const maxSize = config.mcpMaxUrlFileSize ?? config.maxFileSize;
 
-    // Validate URL protocol and SSRF
-    const urlError = await validateUrlSafety(sourceUrl);
-    if (urlError) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${urlError}` }],
-        isError: true,
-      };
-    }
+    const folderError = validateFolderId(folder_id);
+    if (folderError) return mcpError(`Error: ${folderError}`);
 
-    // Fetch with timeout
-    let response: Response;
-    try {
-      response = await fetch(sourceUrl, {
-        signal: AbortSignal.timeout(30_000),
-        redirect: "follow",
-      });
-    } catch (err) {
-      const msg = err instanceof Error && err.name === "TimeoutError"
-        ? "Request timed out after 30 seconds"
-        : `Failed to fetch URL: ${err instanceof Error ? err.message : String(err)}`;
-      return {
-        content: [{ type: "text" as const, text: `Error: ${msg}` }],
-        isError: true,
-      };
-    }
+    const result = await safeFetch(sourceUrl, maxSize);
+    if ("error" in result) return mcpError(`Error: ${result.error}`);
 
-    if (!response.ok) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Error: URL returned HTTP ${response.status} ${response.statusText}`,
-        }],
-        isError: true,
-      };
-    }
+    const { response, data } = result;
 
-    // Pre-check Content-Length
-    const contentLength = response.headers.get("content-length");
-    if (contentLength && parseInt(contentLength) > maxSize) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Error: File too large (${contentLength} bytes). Max size for URL uploads is ${maxSize} bytes.`,
-        }],
-        isError: true,
-      };
-    }
-
-    // Read body with size limit
-    const arrayBuffer = await response.arrayBuffer();
-    const data = new Uint8Array(arrayBuffer);
-
-    if (data.byteLength > maxSize) {
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Error: Downloaded file (${data.byteLength} bytes) exceeds max size (${maxSize} bytes)`,
-        }],
-        isError: true,
-      };
+    if (data.byteLength === 0) {
+      return mcpError("Error: Downloaded file is empty (0 bytes)");
     }
 
     // Derive filename
     const contentDisposition = response.headers.get("content-disposition");
-    const safeName = sanitizeFilename(
+    const safeName = ensureBasename(
       overrideFilename ?? filenameFromContentDisposition(contentDisposition) ?? filenameFromUrl(sourceUrl),
-    ) || "download";
+      "download",
+    );
 
     // MIME type from response or filename
     const responseType = response.headers.get("content-type")?.split(";")[0]?.trim();
@@ -352,37 +431,15 @@ function createMcpServer() {
       ? responseType
       : mimeFromFilename(safeName);
 
-    const id = generateId();
-    const s3Key = `files/${id}/${safeName}`;
-
-    await uploadFile(s3Key, data, safeName);
-
-    const expiresAt = parseExpiry(expiry_hours?.toString());
-
-    let passwordHash: string | null = null;
-    if (password) {
-      passwordHash = await Bun.password.hash(password);
-    }
-
-    insertFile({
-      id,
+    return doUpload({
       filename: safeName,
-      size: data.byteLength,
-      type: contentType,
-      s3_key: s3Key,
-      folder_id: folder_id ?? null,
-      expires_at: expiresAt,
-      password_hash: passwordHash,
+      data,
+      contentType,
+      expiry_hours,
+      password,
+      folder_id,
+      extra: { source_url: sourceUrl },
     });
-
-    const url = `${config.baseUrl}/d/${id}`;
-
-    return {
-      content: [{
-        type: "text" as const,
-        text: JSON.stringify({ id, url, filename: safeName, size: data.byteLength, expires_at: expiresAt, source_url: sourceUrl }, null, 2),
-      }],
-    };
   });
 
   mcp.registerTool("list_files", {
@@ -400,9 +457,7 @@ function createMcpServer() {
       downloads: f.downloads,
       url: `${config.baseUrl}/d/${f.id}`,
     }));
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
-    };
+    return mcpResult({ files: summary });
   });
 
   mcp.registerTool("get_file_info", {
@@ -413,18 +468,8 @@ function createMcpServer() {
     },
   }, async ({ id }) => {
     const file = getFile(id);
-    if (!file) {
-      return {
-        content: [{ type: "text" as const, text: "Error: File not found" }],
-        isError: true,
-      };
-    }
-    return {
-      content: [{
-        type: "text" as const,
-        text: JSON.stringify({ ...file, url: `${config.baseUrl}/d/${file.id}` }, null, 2),
-      }],
-    };
+    if (!file) return mcpError("Error: File not found");
+    return mcpResult({ ...file, url: `${config.baseUrl}/d/${file.id}` });
   });
 
   mcp.registerTool("create_folder", {
@@ -451,27 +496,21 @@ function createMcpServer() {
       });
     } catch {
       const fallbackSlug = generateId();
-      insertFolder({
-        id,
-        slug: fallbackSlug,
-        title: title ?? null,
-        description: description ?? null,
-        expires_at: expiresAt,
-      });
-      return {
-        content: [{
-          type: "text" as const,
-          text: JSON.stringify({ id, slug: fallbackSlug, url: `${config.baseUrl}/f/${fallbackSlug}` }, null, 2),
-        }],
-      };
+      try {
+        insertFolder({
+          id,
+          slug: fallbackSlug,
+          title: title ?? null,
+          description: description ?? null,
+          expires_at: expiresAt,
+        });
+      } catch (err) {
+        return mcpError(`Error: Failed to create folder: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return mcpResult({ id, slug: fallbackSlug, url: `${config.baseUrl}/f/${fallbackSlug}` });
     }
 
-    return {
-      content: [{
-        type: "text" as const,
-        text: JSON.stringify({ id, slug: folderSlug, url: `${config.baseUrl}/f/${folderSlug}` }, null, 2),
-      }],
-    };
+    return mcpResult({ id, slug: folderSlug, url: `${config.baseUrl}/f/${folderSlug}` });
   });
 
   mcp.registerTool("list_folders", {
@@ -483,9 +522,7 @@ function createMcpServer() {
       ...f,
       url: `${config.baseUrl}/f/${f.slug}`,
     }));
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
-    };
+    return mcpResult({ folders: summary });
   });
 
   return mcp;
