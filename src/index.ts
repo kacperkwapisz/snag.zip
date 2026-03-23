@@ -14,6 +14,7 @@ import { folderRoutes } from "./routes/folder";
 import { pageRoutes } from "./routes/pages";
 import { uploadRoutes, cleanupPendingUploads } from "./routes/upload";
 import { apiRoutes } from "./routes/api";
+import { mcpRoutes } from "./routes/mcp";
 import { deleteFile } from "./s3";
 import { cleanupExpiredTokens } from "./routes/download";
 
@@ -130,6 +131,7 @@ new Elysia()
   .use(adminRoutes)
   .use(downloadRoutes)
   .use(apiRoutes)
+  .use(mcpRoutes)
   .listen(config.port);
 
 console.log(`snag.zip running at ${config.baseUrl}`);
