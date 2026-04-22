@@ -28,6 +28,17 @@ export function layout(
   <meta name="description" content="snag.zip — self-hosted file sharing. Upload a file, get a short link.">
   <link rel="stylesheet" href="/public/styles.css?v=${cssHash}">
   <link rel="icon" href="/public/favicon.ico">
+  <script>
+    // Apply theme before paint to avoid flash. Modes: 'system' | 'light' | 'dark'.
+    (function() {
+      try {
+        var mode = localStorage.getItem('theme') || 'system';
+        var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+        document.documentElement.dataset.themeMode = mode;
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="bg-surface-2 text-text-primary font-sans antialiased min-h-screen flex flex-col">
   <nav class="nav-blur sticky top-0 z-50 border-b border-border/50">
@@ -35,7 +46,14 @@ export function layout(
       <a href="/" class="text-base font-semibold text-text-primary tracking-tight transition-opacity hover:opacity-60">
         snag.zip
       </a>
-      <a href="/docs" class="text-sm text-text-secondary hover:text-text-primary transition-colors">API</a>
+      <div class="flex items-center gap-4">
+        <a href="/docs" class="text-sm text-text-secondary hover:text-text-primary transition-colors">API</a>
+        <button type="button" id="theme-toggle" class="text-text-secondary hover:text-text-primary transition-colors rounded-full p-1.5 -mr-1.5" aria-label="Toggle theme" title="Toggle theme">
+          <svg data-theme-icon="system" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 20h8M12 17v3"/></svg>
+          <svg data-theme-icon="light" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg data-theme-icon="dark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
     </div>
   </nav>
   <main class="${maxW} mx-auto px-6 pt-12 pb-16 flex-1 w-full">
@@ -51,6 +69,32 @@ export function layout(
   </footer>
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
   <script>
+    (function() {
+      var btn = document.getElementById('theme-toggle');
+      if (!btn) return;
+      var order = ['system', 'light', 'dark'];
+      var mql = window.matchMedia('(prefers-color-scheme: dark)');
+      function apply(mode) {
+        var dark = mode === 'dark' || (mode === 'system' && mql.matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.dataset.themeMode = mode;
+        btn.querySelectorAll('[data-theme-icon]').forEach(function(el) {
+          el.classList.toggle('hidden', el.dataset.themeIcon !== mode);
+        });
+        btn.setAttribute('title', 'Theme: ' + mode + ' (click to change)');
+      }
+      var current = localStorage.getItem('theme') || 'system';
+      apply(current);
+      btn.addEventListener('click', function() {
+        current = order[(order.indexOf(current) + 1) % order.length];
+        if (current === 'system') localStorage.removeItem('theme');
+        else localStorage.setItem('theme', current);
+        apply(current);
+      });
+      mql.addEventListener('change', function() {
+        if ((localStorage.getItem('theme') || 'system') === 'system') apply('system');
+      });
+    })();
     function showToast(message, type, duration) {
       type = type || 'error';
       duration = duration || 4000;

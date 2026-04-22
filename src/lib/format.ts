@@ -84,6 +84,24 @@ export function fileTypeLabel(mimeType: string, filename: string): string {
   return ext !== "FILE" ? `${ext} File` : "File";
 }
 
+export function timeAgo(isoString: string): string {
+  const now = Date.now();
+  const then = new Date(isoString + "Z").getTime();
+  const diff = now - then;
+
+  if (diff < 60 * 1000) return "just now";
+  const minutes = Math.floor(diff / (60 * 1000));
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.floor(days / 365);
+  return `${years}y ago`;
+}
+
 export function timeUntilExpiry(expiresAt: string): string {
   const now = Date.now();
   const expiry = new Date(expiresAt + "Z").getTime();

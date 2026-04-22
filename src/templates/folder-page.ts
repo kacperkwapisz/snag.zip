@@ -16,8 +16,11 @@ export function folderPage(
     ? `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-8">
         ${files
           .map((f, i) => {
-            const delay = Math.min(i * 0.05, 0.4);
-            return `<div class="animate-fade-in" style="animation-delay:${delay}s">${folderFileCard(f)}</div>`;
+            // Cap stagger index at 12 so folders with 50 files don't
+            // keep delaying past 600ms — past that point everything
+            // arrives together but the first dozen feel alive.
+            const idx = Math.min(i, 12);
+            return `<div class="animate-in" style="--stagger-index:${idx}">${folderFileCard(f)}</div>`;
           })
           .join("")}
       </div>`

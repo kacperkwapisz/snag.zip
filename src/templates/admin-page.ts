@@ -277,13 +277,25 @@ export function adminPage(
       var tr = btn.closest('tr');
       var url = type === 'folder' ? '/admin/folders/' + id : '/admin/files/' + id;
       closeDeleteDialog(function() {
-        fetch(url, { method: 'DELETE' }).then(function(res) {
-          if (res.ok) {
-            tr.classList.add('animate-fade-out');
-            tr.addEventListener('animationend', function() { tr.remove(); });
-          } else {
-            showToast('Failed to delete ' + type);
+        // Optimistic: remove row immediately, restore on failure.
+        var parent = tr.parentNode;
+        var nextSibling = tr.nextSibling;
+        tr.classList.add('animate-fade-out');
+        tr.addEventListener('animationend', function() { tr.remove(); });
+
+        function rollback(msg) {
+          tr.classList.remove('animate-fade-out');
+          if (parent && !tr.isConnected) {
+            var ref = nextSibling && nextSibling.parentNode === parent ? nextSibling : null;
+            parent.insertBefore(tr, ref);
           }
+          showToast(msg);
+        }
+
+        fetch(url, { method: 'DELETE', keepalive: true }).then(function(res) {
+          if (!res.ok) rollback('Failed to delete ' + type);
+        }).catch(function() {
+          rollback('Failed to delete ' + type);
         });
       });
     });
@@ -326,17 +338,32 @@ export function adminPage(
 
     function revokeKey(id, btn) {
       if (!confirm('Revoke this API key? It will stop working immediately.')) return;
-      fetch('/admin/api-keys/' + id, { method: 'DELETE' }).then(function(res) {
-        if (res.ok) {
-          var row = document.getElementById('key-row-' + id);
-          if (row) {
-            row.classList.add('animate-fade-out');
-            row.addEventListener('animationend', function() { row.remove(); });
+      var row = document.getElementById('key-row-' + id);
+      var parent = row ? row.parentNode : null;
+      var nextSibling = row ? row.nextSibling : null;
+
+      // Optimistic: remove row immediately, restore on failure.
+      if (row) {
+        row.classList.add('animate-fade-out');
+        row.addEventListener('animationend', function() { row.remove(); });
+      }
+      showToast('API key revoked', 'success');
+
+      function rollback() {
+        if (row) {
+          row.classList.remove('animate-fade-out');
+          if (parent && !row.isConnected) {
+            var ref = nextSibling && nextSibling.parentNode === parent ? nextSibling : null;
+            parent.insertBefore(row, ref);
           }
-          showToast('API key revoked', 'success');
-        } else {
-          showToast('Failed to revoke key');
         }
+        showToast('Failed to revoke key');
+      }
+
+      fetch('/admin/api-keys/' + id, { method: 'DELETE', keepalive: true }).then(function(res) {
+        if (!res.ok) rollback();
+      }).catch(function() {
+        rollback();
       });
     }
   </script>`;

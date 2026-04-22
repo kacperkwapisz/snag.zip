@@ -1,10 +1,17 @@
 import { layout } from "./layout";
-import { formatBytes, fileTypeLabel, esc } from "../lib/format";
+import {
+  formatBytes,
+  fileTypeLabel,
+  timeAgo,
+  timeUntilExpiry,
+  esc,
+} from "../lib/format";
 import type { FileRow } from "../db";
 
-function fileIcon(): string {
+function fileIcon(variant?: "unlocked"): string {
+  const extra = variant === "unlocked" ? " animate-unlock" : "";
   return `
-    <div class="w-16 h-16 rounded-2xl bg-surface-3 ring-subtle flex items-center justify-center mx-auto mb-5">
+    <div class="w-16 h-16 rounded-2xl bg-surface-3 ring-subtle flex items-center justify-center mx-auto mb-5${extra}">
       <svg class="text-text-primary" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 7L16 7"/>
         <path d="M8 11L12 11"/>
@@ -13,20 +20,38 @@ function fileIcon(): string {
     </div>`;
 }
 
-export function downloadPage(file: FileRow, baseUrl: string, error?: string, token?: string | null): string {
-  const isProtected = !!file.password_hash;
+function fileMeta(file: FileRow): string {
   const typeLabel = fileTypeLabel(file.type, file.filename);
+  const uploaded = timeAgo(file.uploaded_at);
+  const expiry = file.expires_at ? timeUntilExpiry(file.expires_at) : null;
+
+  return `
+    <p class="text-sm text-text-tertiary tabular-nums mt-2">
+      ${esc(typeLabel)} &middot; ${formatBytes(file.size)}
+    </p>
+    <p class="text-xs text-text-tertiary/80 tabular-nums mt-1">
+      Shared ${esc(uploaded)}${expiry ? ` &middot; Expires in ${esc(expiry)}` : ""}
+    </p>`;
+}
+
+export function downloadPage(
+  file: FileRow,
+  baseUrl: string,
+  error?: string,
+  token?: string | null,
+): string {
+  const isProtected = !!file.password_hash;
 
   const body = `
     <div class="flex items-center justify-center min-h-[60vh]">
-      <div class="card-elevated rounded-2xl p-8 max-w-lg w-full text-center animate-fade-in" ${error ? 'style="animation: fade-in-up 0.5s ease-out both, shake 0.4s ease-out 0.5s"' : ""}>
+      <div class="card-elevated rounded-2xl p-8 max-w-lg w-full text-center ${error ? "animate-fade-in-shake" : "animate-fade-in"}">
         ${fileIcon()}
         <h1 class="text-xl font-semibold text-text-primary mb-1 break-all text-balance">${esc(file.filename)}</h1>
-        <p class="text-sm text-text-tertiary tabular-nums mt-2 mb-6">
-          ${esc(typeLabel)} &middot; ${formatBytes(file.size)}
-        </p>
-        ${error ? `<p class="text-danger text-sm mb-4">${esc(error)}</p>` : ""}
-        ${isProtected ? passwordForm(file.id) : downloadButton(file.id, token ?? undefined)}
+        ${fileMeta(file)}
+        <div class="mt-6">
+          ${error ? `<p class="text-danger text-sm mb-4">${esc(error)}</p>` : ""}
+          ${isProtected ? passwordForm(file.id) : downloadButton(file.id, token ?? undefined)}
+        </div>
       </div>
     </div>
   `;
@@ -68,18 +93,18 @@ function passwordForm(id: string): string {
     </form>`;
 }
 
-export function downloadUnlockedPage(file: FileRow, baseUrl: string, token: string): string {
-  const typeLabel = fileTypeLabel(file.type, file.filename);
-
+export function downloadUnlockedPage(
+  file: FileRow,
+  baseUrl: string,
+  token: string,
+): string {
   const body = `
     <div class="flex items-center justify-center min-h-[60vh]">
       <div class="card-elevated rounded-2xl p-8 max-w-lg w-full text-center animate-fade-in">
-        ${fileIcon()}
+        ${fileIcon("unlocked")}
         <h1 class="text-xl font-semibold text-text-primary mb-1 break-all text-balance">${esc(file.filename)}</h1>
-        <p class="text-sm text-text-tertiary tabular-nums mt-2 mb-2">
-          ${esc(typeLabel)} &middot; ${formatBytes(file.size)}
-        </p>
-        <p class="text-sm text-success font-medium inline-flex items-center gap-1 mb-6">
+        ${fileMeta(file)}
+        <p class="text-sm text-success font-medium inline-flex items-center gap-1 mt-3 mb-6 animate-verified-in">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 14L8.5 17.5L19 6.5"/></svg>
           Password verified
         </p>
@@ -101,7 +126,7 @@ export function expiredPage(): string {
             <path d="M12 8V12L14 14" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <h1 class="text-5xl font-semibold text-text-primary mb-4 text-balance">Gone</h1>
+        <h1 class="text-5xl font-semibold text-text-primary mb-6 text-balance">Gone</h1>
         <p class="text-lg text-text-secondary text-pretty mb-8">This file has expired or doesn't exist.</p>
         <a href="/" class="btn inline-block px-6 py-2.5 bg-accent hover:bg-accent-hover text-white font-medium rounded-xl">Upload a new file</a>
       </div>

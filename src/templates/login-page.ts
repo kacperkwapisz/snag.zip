@@ -4,7 +4,7 @@ import { esc } from "../lib/format";
 export function loginPage(error?: string, redirect?: string): string {
   const body = `
     <div class="flex items-center justify-center min-h-[60vh]">
-      <div class="card-elevated rounded-2xl p-8 max-w-sm w-full animate-fade-in" ${error ? 'style="animation: fade-in-up 0.5s ease-out both, shake 0.4s ease-out 0.5s"' : ""}>
+      <div class="card-elevated rounded-2xl p-8 max-w-sm w-full ${error ? "animate-fade-in-shake" : "animate-fade-in"}">
         <div class="text-center mb-8">
           <div class="mx-auto mb-4 text-text-tertiary/30">
             <svg class="mx-auto" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">

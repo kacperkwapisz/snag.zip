@@ -73,11 +73,11 @@ export function uploadPage(options?: { locked?: boolean }): string {
       <div class="card-elevated rounded-2xl p-6">
         <p id="multi-summary" class="text-sm text-text-secondary mb-4"></p>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button id="btn-separate" class="card-elevated rounded-xl p-5 text-left hover:border-accent transition-colors cursor-pointer">
+          <button id="btn-separate" class="card-elevated card-hoverable rounded-xl p-5 text-left cursor-pointer">
             <p class="font-medium text-text-primary mb-1">Separate links</p>
             <p class="text-sm text-text-secondary">Each file gets its own shareable link</p>
           </button>
-          <button id="btn-folder" class="card-elevated rounded-xl p-5 text-left hover:border-accent transition-colors cursor-pointer">
+          <button id="btn-folder" class="card-elevated card-hoverable rounded-xl p-5 text-left cursor-pointer">
             <p class="font-medium text-text-primary mb-1">As a folder</p>
             <p class="text-sm text-text-secondary">One link for all files</p>
             <p id="folder-pw-note" class="text-xs text-text-tertiary mt-1 hidden">Password not applied in folder mode</p>
@@ -211,8 +211,10 @@ export function uploadPage(options?: { locked?: boolean }): string {
       result.classList.remove('visible');
       progressFilename.textContent = file.name;
       progressBarEl.style.width = '0%';
-      progressBarEl.classList.add('progress-shimmer');
-      progressBarEl.classList.remove('bg-success', 'bg-accent');
+      // No shimmer during active determinate progress — the width
+      // transition itself communicates motion. Shimmer is reserved
+      // for indeterminate/finalizing states only.
+      progressBarEl.classList.remove('progress-shimmer', 'bg-success', 'bg-accent');
       progressPercent.textContent = '0%';
       progressSpeed.textContent = '';
       dropIcon.style.opacity = '0.3';
@@ -222,7 +224,6 @@ export function uploadPage(options?: { locked?: boolean }): string {
     function showUploadSuccess(url) {
       resultLink.value = url;
       progressBarEl.style.width = '100%';
-      progressBarEl.classList.remove('progress-shimmer');
       progressBarEl.classList.add('bg-success');
       progressSpeed.textContent = '';
       setTimeout(function() {
@@ -684,8 +685,11 @@ export function uploadPage(options?: { locked?: boolean }): string {
     }
 
     function markRowActive(index) {
-      var bar = document.getElementById('mpr-bar-' + index);
-      if (bar) bar.classList.add('progress-shimmer');
+      // Previously added .progress-shimmer here. Removed for the same
+      // reason as single-file upload: width transition already shows
+      // progress; infinite shimmer competes with it.
+      // Kept as a hook for future "finalizing" state.
+      void index;
     }
 
     function copyResultLink(btn) {
